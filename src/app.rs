@@ -1,13 +1,13 @@
 use std::io;
 use std::time::{Duration, Instant};
 
+use crossterm::cursor::{Hide, Show};
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
 use crossterm::execute;
+use crossterm::style::ResetColor;
 use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
-use ratatui::Terminal;
-use ratatui::backend::CrosstermBackend;
 
 use crate::blackjack::BlackjackSession;
 use crate::breakout::BreakoutSession;
@@ -1020,23 +1020,26 @@ pub fn run_tui(
 ) -> io::Result<()> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen)?;
-    let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend)?;
-    let result = run_event_loop(&mut terminal, App::new(catalog, route, history));
+    execute!(stdout, EnterAlternateScreen, Hide)?;
+    let mut renderer = ui::Renderer::new();
+    let result = run_event_loop(
+        &mut stdout,
+        &mut renderer,
+        App::new(catalog, route, history),
+    );
 
     disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
-    terminal.show_cursor()?;
+    execute!(stdout, ResetColor, Show, LeaveAlternateScreen)?;
     result
 }
 
 fn run_event_loop(
-    terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
+    output: &mut io::Stdout,
+    renderer: &mut ui::Renderer,
     mut app: App,
 ) -> io::Result<()> {
     while !app.should_quit {
-        terminal.draw(|frame| ui::draw(frame, &app))?;
+        renderer.draw(output, &app)?;
         if event::poll(Duration::from_millis(100))?
             && let Event::Key(key) = event::read()?
         {
