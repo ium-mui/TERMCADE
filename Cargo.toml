@@ -5,6 +5,10 @@ edition = "2024"
 description = "확장 가능한 TUI CLI 게임"
 license = "MIT"
 
+[[bin]]
+name = "tcade"
+path = "src/main.rs"
+
 [dependencies]
 chrono = { version = "0.4", features = ["clock", "serde"] }
 clap = { version = "4.5", features = ["derive"] }

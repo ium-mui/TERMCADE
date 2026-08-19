@@ -7,10 +7,11 @@ use crate::domain::{GameCatalog, GameId, StageId};
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "cli-game",
+    name = "tcade",
+    bin_name = "tcade",
     version,
-    about = "짧게 즐기는 확장형 터미널 게임",
-    long_about = "게임과 스테이지를 선택해 터미널에서 플레이하는 CLI 게임입니다."
+    about = "터미널에서 즐기는 작고 강력한 아케이드",
+    long_about = "게임과 스테이지를 선택해 터미널에서 플레이하는 TERMCADE입니다."
 )]
 pub struct Cli {
     #[arg(value_name = "COMMAND")]
@@ -36,12 +37,15 @@ pub enum CliError {
         stage_id: String,
         available: String,
     },
-    #[error("명령어가 너무 많습니다. 사용법: cli-game [game [stage]]")]
+    #[error("명령어가 너무 많습니다. 사용법: tcade [game [stage]]")]
     TooManyArguments,
 }
 
 pub fn resolve_route(path: &[String], catalog: &GameCatalog) -> Result<CliRoute, CliError> {
-    let path = path.strip_prefix(&["cli-game".to_string()]).unwrap_or(path);
+    let path = path
+        .strip_prefix(&["tcade".to_string()])
+        .or_else(|| path.strip_prefix(&["cli-game".to_string()]))
+        .unwrap_or(path);
     match path {
         [] => Ok(CliRoute::GameSelect),
         [game_id] => {
@@ -124,7 +128,7 @@ mod tests {
         assert_eq!(
             resolve_route(
                 &[
-                    "cli-game".to_string(),
+                    "tcade".to_string(),
                     "math".to_string(),
                     "division-1".to_string()
                 ],
