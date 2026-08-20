@@ -6,6 +6,7 @@ pub mod cli;
 pub mod domain;
 pub mod game_2048;
 pub mod history;
+pub mod holdem;
 pub mod roulette;
 pub mod round;
 pub mod slots;
@@ -27,6 +28,9 @@ pub use domain::{
 };
 pub use game_2048::Game2048Session;
 pub use history::{HistoryStore, JsonHistoryStore, MemoryHistoryStore, PlayRecord};
+pub use holdem::{
+    HoldemAction, HoldemAiAction, HoldemDifficulty, HoldemOutcome, HoldemSession, HoldemStreet,
+};
 pub use roulette::{RouletteColor, RouletteSession};
 pub use round::{RoundResult, RoundSession, RoundStatus};
 pub use slots::{SlotSymbol, SlotsSession};

@@ -14,7 +14,8 @@ use crate::breakout::{
     BOARD_HEIGHT as BREAKOUT_BOARD_HEIGHT, BOARD_WIDTH as BREAKOUT_BOARD_WIDTH, PADDLE_WIDTH,
 };
 use crate::domain::{GameDefinition, GameKind, StageDefinition};
-use crate::game_2048::GRID_SIZE;
+use crate::game_2048::{GRID_SIZE, Game2048Session};
+use crate::holdem::HoldemAiAction;
 use crate::roulette::{RouletteColor, WHEEL_NUMBERS};
 use crate::round::{RoundSession, RoundStatus};
 use crate::snake::{BOARD_HEIGHT, BOARD_WIDTH, Direction, Point};
@@ -287,6 +288,7 @@ pub struct Renderer {
 
 impl Renderer {
     pub fn new() -> Self {
+        crossterm::style::force_color_output(true);
         Self { previous: None }
     }
 
@@ -340,9 +342,9 @@ impl Renderer {
                 queue!(
                     output,
                     MoveTo(x, y),
+                    SetAttribute(Attribute::Reset),
                     SetForegroundColor(cell.paint.foreground),
-                    SetBackgroundColor(cell.paint.background),
-                    SetAttribute(Attribute::Reset)
+                    SetBackgroundColor(cell.paint.background)
                 )?;
                 if cell.paint.bold {
                     queue!(output, SetAttribute(Attribute::Bold))?;
@@ -419,7 +421,10 @@ fn draw_footer(buffer: &mut Buffer, app: &App, area: Rect) {
     let help = match app.screen {
         Screen::GameSelect => "↑↓ SELECT CABINET   ENTER INSERT COIN   ESC EXIT",
         Screen::StageSelect => "↑↓ SELECT MODE   ENTER READY   ESC BACK",
-        Screen::Ready => "ENTER START   ESC BACK   Ctrl+C EXIT",
+        Screen::Ready => "ENTER OPEN TABLE / START GAME   ESC BACK   Ctrl+C EXIT",
+        Screen::Playing if app.gambling_feedback.is_some() => {
+            "ENTER NEXT HAND   ESC EXIT CABINET   Ctrl+C QUIT"
+        }
         Screen::Playing if app.snake_session.is_some() => {
             "ARROWS/WASD MOVE   ESC EXIT CABINET   Ctrl+C QUIT"
         }
@@ -433,13 +438,16 @@ fn draw_footer(buffer: &mut Buffer, app: &App, area: Rect) {
             "ARROWS MOVE   NUMBER INPUT   BACKSPACE CLEAR   ESC EXIT"
         }
         Screen::Playing if app.blackjack_session.is_some() => {
-            "ENTER/H HIT   S/SPACE STAND   ESC EXIT   Ctrl+C QUIT"
+            "TYPE BET   ENTER/H HIT   S/SPACE STAND   ESC EXIT   Ctrl+C QUIT"
         }
         Screen::Playing if app.roulette_session.is_some() => {
-            "1 RED   2 BLACK   3 GREEN   ENTER SPIN   ESC EXIT"
+            "TYPE BET   R RED   B BLACK   G GREEN   ENTER SPIN   ESC EXIT"
         }
         Screen::Playing if app.slots_session.is_some() => {
-            "ENTER/SPACE PULL   ESC EXIT   Ctrl+C QUIT"
+            "TYPE BET   ENTER/SPACE PULL   ESC EXIT   Ctrl+C QUIT"
+        }
+        Screen::Playing if app.holdem_session.is_some() => {
+            "TYPE BET   C CHECK   R +10   T +25   Y +50   F FOLD   ESC EXIT"
         }
         Screen::Playing if app.typing_session.is_some() => {
             "TYPE   ENTER SUBMIT   BACKSPACE EDIT   ESC EXIT"
@@ -732,7 +740,7 @@ fn draw_ready(buffer: &mut Buffer, app: &App, area: Rect) {
     let Some(stage) = app.selected_stage_definition() else {
         return;
     };
-    let panel = centered(area, 82.min(area.width), 15.min(area.height));
+    let panel = centered(area, 82.min(area.width), 16.min(area.height));
     buffer.panel(
         panel,
         &format!(" {} / PRESS START ", game.display_name),
@@ -765,22 +773,55 @@ fn draw_ready(buffer: &mut Buffer, app: &App, area: Rect) {
         game_controls(stage.game_kind),
         Paint::new(TEXT, SURFACE, false),
     );
-    let best = app
-        .best_record(&game.id, &stage.id)
-        .map(|record| format!("HIGH SCORE  {} pts", record.score))
-        .unwrap_or_else(|| "HIGH SCORE  —".to_string());
-    buffer.centered_text(
-        inner,
-        inner.y.saturating_add(9),
-        &best,
-        Paint::new(YELLOW, SURFACE, false),
+    let is_gambling = matches!(
+        stage.game_kind,
+        GameKind::Blackjack | GameKind::Roulette | GameKind::Slots | GameKind::Holdem
     );
-    buffer.centered_text(
-        inner,
-        inner.y.saturating_add(11),
-        "ENTER  START GAME",
-        Paint::new(BG, CYAN, true),
-    );
+    if is_gambling {
+        buffer.centered_text(
+            inner,
+            inner.y.saturating_add(9),
+            "TABLE SETTINGS  ·  BET INSIDE GAME",
+            Paint::new(YELLOW, SURFACE, true),
+        );
+        buffer.centered_text(
+            inner,
+            inner.y.saturating_add(10),
+            &format!("WALLET  {} WON", app.wallet_won()),
+            Paint::new(MUTED, SURFACE, false),
+        );
+        buffer.centered_text(
+            inner,
+            inner.y.saturating_add(11),
+            "ENTER OPEN TABLE   ·   SET WAGER AFTER ENTRY",
+            Paint::new(BG, CYAN, true),
+        );
+        if let Some(message) = app.status_message.as_deref() {
+            buffer.centered_text(
+                inner,
+                inner.y.saturating_add(12),
+                message,
+                Paint::new(RED, SURFACE, false),
+            );
+        }
+    } else {
+        let best = app
+            .best_record(&game.id, &stage.id)
+            .map(|record| format!("HIGH SCORE  {} pts", record.score))
+            .unwrap_or_else(|| "HIGH SCORE  —".to_string());
+        buffer.centered_text(
+            inner,
+            inner.y.saturating_add(9),
+            &best,
+            Paint::new(YELLOW, SURFACE, false),
+        );
+        buffer.centered_text(
+            inner,
+            inner.y.saturating_add(11),
+            "ENTER  START GAME",
+            Paint::new(BG, CYAN, true),
+        );
+    }
 }
 
 fn draw_playing(buffer: &mut Buffer, app: &App, area: Rect) {
@@ -798,6 +839,8 @@ fn draw_playing(buffer: &mut Buffer, app: &App, area: Rect) {
         draw_roulette(buffer, app, area);
     } else if app.slots_session.is_some() {
         draw_slots(buffer, app, area);
+    } else if app.holdem_session.is_some() {
+        draw_holdem(buffer, app, area);
     } else if app.typing_session.is_some() {
         draw_typing(buffer, app, area);
     } else if app.breakout_session.is_some() {
@@ -1000,60 +1043,116 @@ fn draw_2048(buffer: &mut Buffer, app: &App, area: Rect) {
     let Some(session) = app.game2048_session.as_ref() else {
         return;
     };
-    let panel = centered(
-        area,
-        area.width.saturating_sub(4),
-        area.height.saturating_sub(2),
-    );
+    let panel = centered(area, area.width.saturating_sub(2), area.height);
     buffer.panel(panel, " 2048 // MERGE THE FUTURE ", YELLOW, SURFACE);
-    let inner = panel.inset(2);
-    let tile_width = 8;
-    let tile_height = if inner.height >= 18 { 3 } else { 2 };
+    let inner = panel.inset(1);
+    let tile_width = if inner.width >= 50 { 11 } else { 9 };
+    let tile_height = if inner.height >= 22 { 4 } else { 3 };
     let board_width = GRID_SIZE as u16 * tile_width + (GRID_SIZE as u16 - 1) + 2;
     let board_height = GRID_SIZE as u16 * tile_height + (GRID_SIZE as u16 - 1) + 2;
-    let board = Rect::new(inner.x, inner.y, board_width, board_height);
-    buffer.panel(board, " BOARD ", BORDER, PANEL_ALT);
+    draw_2048_status(buffer, app, session, inner);
+    let board = Rect::new(
+        inner.x + inner.width.saturating_sub(board_width) / 2,
+        inner.y.saturating_add(1),
+        board_width,
+        board_height,
+    );
+    buffer.panel(board, " GRID // 4 × 4 ", BORDER_BRIGHT, PANEL_ALT);
     let cells = board.inset(1);
+    let frame = (session.elapsed().as_millis() / 220) as usize;
     for (row_index, row) in session.board().iter().enumerate() {
         for (column_index, tile) in row.iter().enumerate() {
             let x = cells.x + column_index as u16 * (tile_width + 1);
             let y = cells.y + row_index as u16 * (tile_height + 1);
-            draw_2048_tile(buffer, Rect::new(x, y, tile_width, tile_height), *tile);
+            let shimmer = (frame + row_index * GRID_SIZE + column_index).is_multiple_of(13);
+            draw_2048_tile(
+                buffer,
+                Rect::new(x, y, tile_width, tile_height),
+                *tile,
+                shimmer,
+            );
         }
     }
-    let hud = Rect::new(
-        board.x.saturating_add(board.width + 2),
-        inner.y,
-        inner.width.saturating_sub(board.width + 2),
-        board.height,
-    );
-    draw_simple_hud(
-        buffer,
-        hud,
-        " SCORE ",
-        &[
-            ("CURRENT", session.score().to_string(), YELLOW),
-            ("MOVES", session.moves().to_string(), BLUE),
-            ("TARGET", "2048".to_string(), PURPLE),
-        ],
-        "ARROWS / WASD  MOVE TILES",
-    );
 }
 
-fn draw_2048_tile(buffer: &mut Buffer, rect: Rect, tile: u32) {
+fn draw_2048_tile(buffer: &mut Buffer, rect: Rect, tile: u32, shimmer: bool) {
     let (foreground, background) = tile_colors(tile);
-    buffer.fill(rect, Paint::new(foreground, background, true));
-    let label = if tile == 0 {
-        "·".to_string()
+    let border = tile_border(tile, shimmer);
+    let highlight = tile_highlight(tile, shimmer);
+    let shadow = tile_shadow(tile);
+    buffer.fill(rect, Paint::new(background, background, false));
+
+    for x in rect.x..rect.x.saturating_add(rect.width) {
+        buffer.set(x, rect.y, '▀', Paint::new(highlight, background, true));
+        buffer.set(
+            x,
+            rect.y.saturating_add(rect.height.saturating_sub(1)),
+            '▄',
+            Paint::new(shadow, background, false),
+        );
+    }
+    for y in rect.y.saturating_add(1)..rect.y.saturating_add(rect.height.saturating_sub(1)) {
+        buffer.set(rect.x, y, '▌', Paint::new(highlight, background, true));
+        buffer.set(
+            rect.x.saturating_add(rect.width.saturating_sub(1)),
+            y,
+            '▐',
+            Paint::new(shadow, background, false),
+        );
+    }
+
+    if tile == 0 {
+        if shimmer {
+            buffer.centered_text(
+                rect,
+                rect.y + rect.height / 2,
+                "·  ·",
+                Paint::new(border, background, true),
+            );
+        }
     } else {
-        tile.to_string()
+        buffer.centered_text(
+            rect,
+            rect.y + rect.height / 2,
+            &tile.to_string(),
+            Paint::new(foreground, background, true),
+        );
+    }
+}
+
+fn draw_2048_status(buffer: &mut Buffer, app: &App, session: &Game2048Session, rect: Rect) {
+    let best_score = if let (Some(game), Some(stage)) = (
+        app.selected_game_definition(),
+        app.selected_stage_definition(),
+    ) {
+        app.best_record(&game.id, &stage.id)
+            .map(|record| record.score)
+            .unwrap_or(0)
+    } else {
+        0
     };
-    buffer.centered_text(
-        rect,
-        rect.y + rect.height / 2,
-        &label,
-        Paint::new(foreground, background, true),
-    );
+    let elapsed = session.elapsed().as_secs();
+    let run_time = format!("{:02}:{:02}", elapsed / 60, elapsed % 60);
+    let max_tile = session.board().iter().flatten().copied().max().unwrap_or(0);
+    let left = format!("◈ SCORE {:05}", session.score());
+    let center = format!("MOVES {:02}   TIME {run_time}", session.moves());
+    let right = format!("BEST {:05}  ◇ {}", best_score, max_tile.max(2));
+
+    buffer.text(rect.x, rect.y, &left, Paint::new(YELLOW, SURFACE, true));
+    buffer.centered_text(rect, rect.y, &center, Paint::new(TEXT, SURFACE, false));
+    let right_x = rect
+        .x
+        .saturating_add(rect.width.saturating_sub(right.width() as u16));
+    buffer.text(right_x, rect.y, &right, Paint::new(CYAN, SURFACE, true));
+
+    if session.is_game_over() {
+        buffer.centered_text(
+            rect,
+            rect.y,
+            "▣ GAME OVER ▣",
+            Paint::new(RED, SURFACE, true),
+        );
+    }
 }
 
 fn draw_sudoku(buffer: &mut Buffer, app: &App, area: Rect) {
@@ -1213,29 +1312,43 @@ fn draw_blackjack(buffer: &mut Buffer, app: &App, area: Rect) {
     );
     let inner = panel.inset(2);
     buffer.text(
+        inner.x.saturating_add(inner.width.saturating_sub(16)),
+        inner.y,
+        &gambling_wager_label(app),
+        Paint::new(YELLOW, Color::Rgb { r: 8, g: 53, b: 45 }, true),
+    );
+    buffer.text(
         inner.x,
         inner.y,
         "DEALER",
         Paint::new(YELLOW, Color::Rgb { r: 8, g: 53, b: 45 }, true),
     );
-    draw_cards(
-        buffer,
-        session.dealer_cards(),
-        inner.x,
-        inner.y + 2,
-        !session.dealer_revealed(),
-    );
+    if app.card_hand_started() {
+        draw_cards(
+            buffer,
+            session.dealer_cards(),
+            inner.x,
+            inner.y + 2,
+            !session.dealer_revealed(),
+        );
+    } else {
+        draw_card_backs(buffer, inner.x, inner.y + 2, 2);
+    }
     buffer.text(
         inner.x,
         inner.y.saturating_add(7),
-        &format!(
-            "VISIBLE SCORE  {}",
-            if session.dealer_revealed() {
-                session.dealer_score()
-            } else {
-                session.dealer_visible_score()
-            }
-        ),
+        &if app.card_hand_started() {
+            format!(
+                "VISIBLE SCORE  {}",
+                if session.dealer_revealed() {
+                    session.dealer_score()
+                } else {
+                    session.dealer_visible_score()
+                }
+            )
+        } else {
+            "VISIBLE SCORE  --".to_string()
+        },
         Paint::new(TEXT, Color::Rgb { r: 8, g: 53, b: 45 }, false),
     );
     buffer.text(
@@ -1244,15 +1357,32 @@ fn draw_blackjack(buffer: &mut Buffer, app: &App, area: Rect) {
         "PLAYER",
         Paint::new(CYAN, Color::Rgb { r: 8, g: 53, b: 45 }, true),
     );
-    draw_cards(buffer, session.player_cards(), inner.x, inner.y + 11, false);
+    if app.card_hand_started() {
+        draw_cards(buffer, session.player_cards(), inner.x, inner.y + 11, false);
+    } else {
+        draw_card_backs(buffer, inner.x, inner.y + 11, 2);
+    }
     buffer.text(
         inner.x,
         inner.y.saturating_add(16),
-        &format!("SCORE  {}", session.player_score()),
+        &if app.card_hand_started() {
+            format!("SCORE  {}", session.player_score())
+        } else {
+            "SCORE  --".to_string()
+        },
         Paint::new(TEXT, Color::Rgb { r: 8, g: 53, b: 45 }, true),
     );
-    let feedback =
-        gambling_feedback_line(app).unwrap_or_else(|| "ENTER/H HIT   S/SPACE STAND".to_string());
+    let feedback = gambling_feedback_line(app)
+        .or_else(|| app.status_message.clone())
+        .unwrap_or_else(|| {
+            if !app.card_hand_betting_open() {
+                "ENTER START HAND   ·   ESC LEAVE TABLE".to_string()
+            } else if !app.card_hand_started() {
+                "TYPE BET AMOUNT   ·   ENTER DEAL CARDS".to_string()
+            } else {
+                "ENTER/H HIT   S/SPACE STAND".to_string()
+            }
+        });
     buffer.text(
         inner.x,
         inner.y.saturating_add(inner.height.saturating_sub(2)),
@@ -1263,6 +1393,183 @@ fn draw_blackjack(buffer: &mut Buffer, app: &App, area: Rect) {
             true,
         ),
     );
+}
+
+fn draw_holdem(buffer: &mut Buffer, app: &App, area: Rect) {
+    let Some(session) = app.holdem_session.as_ref() else {
+        return;
+    };
+    let felt = Color::Rgb { r: 7, g: 68, b: 51 };
+    let panel = centered(
+        area,
+        area.width.saturating_sub(4),
+        area.height.saturating_sub(2),
+    );
+    buffer.fill(panel, Paint::new(TEXT, felt, false));
+    buffer.panel(panel, " TEXAS HOLD'EM // AI TABLE ", YELLOW, felt);
+    let inner = panel.inset(2);
+    let difficulty = session.difficulty().label();
+    let hand_started = app.card_hand_started();
+    buffer.text(
+        inner.x,
+        inner.y,
+        &format!("OPPONENT  AI // {difficulty}"),
+        Paint::new(YELLOW, felt, true),
+    );
+    buffer.text(
+        inner.x.saturating_add(inner.width.saturating_sub(25)),
+        inner.y,
+        &format!(
+            "{}  POT {:03}  {}",
+            session.street().label(),
+            session.pot(),
+            gambling_wager_label(app)
+        ),
+        Paint::new(TEXT, felt, false),
+    );
+    draw_holdem_card_row(
+        buffer,
+        inner,
+        session.opponent_cards(),
+        !hand_started || session.community_cards().len() < 5,
+        inner.y.saturating_add(1),
+        2,
+    );
+
+    buffer.text(
+        inner.x,
+        inner.y.saturating_add(5),
+        "COMMUNITY CARDS // FLOP · TURN · RIVER",
+        Paint::new(CYAN, felt, true),
+    );
+    draw_holdem_card_row(
+        buffer,
+        inner,
+        session.community_cards(),
+        !hand_started,
+        inner.y.saturating_add(6),
+        5,
+    );
+
+    buffer.text(
+        inner.x,
+        inner.y.saturating_add(10),
+        "YOUR HAND",
+        Paint::new(CYAN, felt, true),
+    );
+    draw_holdem_card_row(
+        buffer,
+        inner,
+        session.player_cards(),
+        !hand_started,
+        inner.y.saturating_add(11),
+        2,
+    );
+
+    let action = session
+        .last_ai_action()
+        .map(HoldemAiAction::label)
+        .unwrap_or("대기");
+    let status = if let Some(outcome) = session.outcome() {
+        let player_hand = session.player_hand_name().unwrap_or("미공개");
+        let opponent_hand = session.opponent_hand_name().unwrap_or("미공개");
+        format!(
+            "{}  · YOU {} / AI {}  · {} · +{} WON",
+            outcome.label(),
+            player_hand,
+            opponent_hand,
+            session.difficulty().label(),
+            session.payout().saturating_mul(app.gambling_total_wager())
+        )
+    } else if let Some(message) = app.status_message.as_deref() {
+        message.to_string()
+    } else if !app.card_hand_betting_open() {
+        "ENTER START HAND   ·   ESC LEAVE TABLE".to_string()
+    } else if !hand_started {
+        "TYPE BET AMOUNT   ·   ENTER DEAL CARDS".to_string()
+    } else {
+        let controls = if app.gambling_bet_committed() {
+            "C CHECK/CALL   R +10   T +25   Y +50   F FOLD"
+        } else {
+            "TYPE BET AMOUNT   ·   C CHECK/CALL   R +10   T +25   Y +50   F FOLD"
+        };
+        format!("AI ACTION  {action}   ·   {controls}")
+    };
+    buffer.text(
+        inner.x,
+        inner.y.saturating_add(inner.height.saturating_sub(1)),
+        &status,
+        Paint::new(
+            if session.is_game_over() { GREEN } else { MUTED },
+            felt,
+            true,
+        ),
+    );
+}
+
+fn draw_holdem_card_row(
+    buffer: &mut Buffer,
+    area: Rect,
+    cards: &[Card],
+    hide: bool,
+    y: u16,
+    slots: usize,
+) {
+    let card_width = 7u16;
+    let gap = 1u16;
+    let total_width = card_width * slots as u16 + gap * slots.saturating_sub(1) as u16;
+    let start_x = area.x + area.width.saturating_sub(total_width) / 2;
+    for index in 0..slots {
+        let rect = Rect::new(
+            start_x + index as u16 * (card_width + gap),
+            y,
+            card_width,
+            3,
+        );
+        let card = cards.get(index).copied();
+        let is_hidden = hide;
+        let (foreground, background, label) = if is_hidden {
+            (CYAN, PANEL_ALT, "◆".to_string())
+        } else if let Some(card) = card {
+            let color = if matches!(card.suit, Suit::Heart | Suit::Diamond) {
+                RED
+            } else {
+                BG
+            };
+            (
+                color,
+                Color::Rgb {
+                    r: 242,
+                    g: 244,
+                    b: 239,
+                },
+                card.label(),
+            )
+        } else {
+            (
+                MUTED,
+                Color::Rgb {
+                    r: 10,
+                    g: 50,
+                    b: 42,
+                },
+                "·".to_string(),
+            )
+        };
+        buffer.fill(rect, Paint::new(foreground, background, true));
+        buffer.panel(
+            rect,
+            "",
+            if is_hidden { CYAN } else { foreground },
+            background,
+        );
+        buffer.centered_text(
+            rect,
+            rect.y + 1,
+            &label,
+            Paint::new(foreground, background, true),
+        );
+    }
 }
 
 fn draw_cards(buffer: &mut Buffer, cards: &[Card], x: u16, y: u16, hide_second: bool) {
@@ -1307,6 +1614,15 @@ fn draw_cards(buffer: &mut Buffer, cards: &[Card], x: u16, y: u16, hide_second: 
     }
 }
 
+fn draw_card_backs(buffer: &mut Buffer, x: u16, y: u16, count: usize) {
+    for index in 0..count {
+        let rect = Rect::new(x.saturating_add(index as u16 * 9), y, 7, 5);
+        buffer.fill(rect, Paint::new(CYAN, PANEL_ALT, true));
+        buffer.panel(rect, "", CYAN, PANEL_ALT);
+        buffer.centered_text(rect, y + 2, "◆", Paint::new(CYAN, PANEL_ALT, true));
+    }
+}
+
 fn draw_roulette(buffer: &mut Buffer, app: &App, area: Rect) {
     let Some(session) = app.roulette_session.as_ref() else {
         return;
@@ -1339,6 +1655,20 @@ fn draw_roulette(buffer: &mut Buffer, app: &App, area: Rect) {
         },
     );
     let inner = panel.inset(2);
+    buffer.text(
+        inner.x.saturating_add(inner.width.saturating_sub(18)),
+        inner.y,
+        &gambling_wager_label(app),
+        Paint::new(
+            YELLOW,
+            Color::Rgb {
+                r: 32,
+                g: 18,
+                b: 39,
+            },
+            true,
+        ),
+    );
     buffer.centered_text(
         inner,
         inner.y,
@@ -1395,16 +1725,50 @@ fn draw_roulette(buffer: &mut Buffer, app: &App, area: Rect) {
             true,
         ),
     );
+    let chip_width = 17;
+    let chip_gap = 2;
+    let chips_width = chip_width * 3 + chip_gap * 2;
+    let chips_x = inner
+        .x
+        .saturating_add(inner.width.saturating_sub(chips_width) / 2);
+    for (index, (color, payout)) in [
+        (RouletteColor::Red, 2),
+        (RouletteColor::Black, 2),
+        (RouletteColor::Green, 36),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let rect = Rect::new(
+            chips_x.saturating_add(index as u16 * (chip_width + chip_gap)),
+            inner.y + 7,
+            chip_width,
+            4,
+        );
+        draw_roulette_chip(buffer, rect, color, session.choice() == Some(color), payout);
+    }
     let choice = session
         .choice()
-        .map(|color| format!("BET  {} {}", color.symbol(), color.label()))
-        .unwrap_or_else(|| "BET  NONE".to_string());
-    buffer.text(
-        inner.x,
-        inner.y + 8,
+        .map(|color| {
+            format!(
+                "YOUR BET  {} {}  ·  {}  ·  WIN {}×",
+                color.symbol(),
+                color.label(),
+                gambling_wager_label(app),
+                if color == RouletteColor::Green { 36 } else { 2 }
+            )
+        })
+        .unwrap_or_else(|| "YOUR BET  NONE  ·  TYPE AMOUNT + SELECT COLOR".to_string());
+    buffer.centered_text(
+        inner,
+        inner.y + 11,
         &choice,
         Paint::new(
-            YELLOW,
+            if session.choice().is_some() {
+                YELLOW
+            } else {
+                MUTED
+            },
             Color::Rgb {
                 r: 32,
                 g: 18,
@@ -1413,10 +1777,14 @@ fn draw_roulette(buffer: &mut Buffer, app: &App, area: Rect) {
             true,
         ),
     );
+    let roulette_controls = app
+        .status_message
+        .as_deref()
+        .unwrap_or("TYPE AMOUNT   R RED   B BLACK   G GREEN   ·   ENTER SPIN");
     buffer.text(
         inner.x,
-        inner.y + 10,
-        "1 RED    2 BLACK    3 GREEN",
+        inner.y + 12,
+        roulette_controls,
         Paint::new(
             TEXT,
             Color::Rgb {
@@ -1434,12 +1802,12 @@ fn draw_roulette(buffer: &mut Buffer, app: &App, area: Rect) {
             .unwrap_or_else(|| "?".to_string());
         buffer.text(
             inner.x,
-            inner.y + 12,
+            inner.y + 13,
             &format!(
                 "RESULT  {} {}  · PAYOUT {} WON",
                 number,
                 result_color.label(),
-                session.payout()
+                session.payout().saturating_mul(app.gambling_total_wager())
             ),
             Paint::new(
                 GREEN,
@@ -1492,6 +1860,20 @@ fn draw_slots(buffer: &mut Buffer, app: &App, area: Rect) {
         "THREE REELS // ONE PULL",
         Paint::new(
             TEXT,
+            Color::Rgb {
+                r: 46,
+                g: 20,
+                b: 35,
+            },
+            true,
+        ),
+    );
+    buffer.text(
+        inner.x.saturating_add(inner.width.saturating_sub(16)),
+        inner.y,
+        &gambling_wager_label(app),
+        Paint::new(
+            YELLOW,
             Color::Rgb {
                 r: 46,
                 g: 20,
@@ -1559,9 +1941,20 @@ fn draw_slots(buffer: &mut Buffer, app: &App, area: Rect) {
         );
     }
     let message = if session.is_game_over() {
-        format!("PAYOUT  {} WON", session.payout())
+        format!(
+            "{}  ·  PAYOUT  {} WON",
+            gambling_wager_label(app),
+            session.payout().saturating_mul(app.gambling_total_wager())
+        )
+    } else if let Some(message) = app.status_message.as_deref() {
+        message.to_string()
+    } else if app.gambling_bet_committed() {
+        format!(
+            "{}  ·  ENTER / SPACE  PULL LEVER",
+            gambling_wager_label(app)
+        )
     } else {
-        "ENTER / SPACE  PULL LEVER".to_string()
+        "TYPE BET AMOUNT  ·  ENTER / SPACE  PULL LEVER".to_string()
     };
     buffer.centered_text(
         inner,
@@ -1885,6 +2278,7 @@ fn game_icon(kind: Option<GameKind>) -> &'static str {
         Some(GameKind::Blackjack) => "♣",
         Some(GameKind::Roulette) => "◉",
         Some(GameKind::Slots) => "▥",
+        Some(GameKind::Holdem) => "♦",
         Some(GameKind::TypingPractice) => "⌨",
         Some(GameKind::Breakout) => "▰",
         None => "◇",
@@ -1898,7 +2292,11 @@ fn game_color(kind: GameKind) -> Color {
         GameKind::TicTacToe => CYAN,
         GameKind::TwentyFortyEight => YELLOW,
         GameKind::Sudoku => PURPLE,
-        GameKind::Gambling | GameKind::Blackjack | GameKind::Roulette | GameKind::Slots => PINK,
+        GameKind::Gambling
+        | GameKind::Blackjack
+        | GameKind::Roulette
+        | GameKind::Slots
+        | GameKind::Holdem => PINK,
         GameKind::TypingPractice => Color::Rgb {
             r: 255,
             g: 154,
@@ -2016,6 +2414,104 @@ fn tile_colors(tile: u32) -> (Color, Color) {
     }
 }
 
+fn tile_border(tile: u32, shimmer: bool) -> Color {
+    if tile == 0 {
+        return if shimmer { BORDER_BRIGHT } else { GRID };
+    }
+    match tile {
+        2 | 4 => BLUE,
+        8 | 16 => YELLOW,
+        32 | 64 => RED,
+        128 | 256 => PURPLE,
+        512 | 1024 => CYAN,
+        _ => GREEN,
+    }
+}
+
+fn tile_highlight(tile: u32, shimmer: bool) -> Color {
+    if tile == 0 {
+        return if shimmer { BORDER_BRIGHT } else { BORDER };
+    }
+    match tile {
+        2 => Color::Rgb {
+            r: 245,
+            g: 250,
+            b: 255,
+        },
+        4 => Color::Rgb {
+            r: 224,
+            g: 238,
+            b: 255,
+        },
+        8 | 16 => Color::Rgb {
+            r: 255,
+            g: 218,
+            b: 132,
+        },
+        32 | 64 => Color::Rgb {
+            r: 255,
+            g: 153,
+            b: 157,
+        },
+        128 | 256 => Color::Rgb {
+            r: 220,
+            g: 194,
+            b: 255,
+        },
+        512 | 1024 => Color::Rgb {
+            r: 171,
+            g: 255,
+            b: 231,
+        },
+        _ => Color::Rgb {
+            r: 255,
+            g: 239,
+            b: 143,
+        },
+    }
+}
+
+fn tile_shadow(tile: u32) -> Color {
+    match tile {
+        0 => BG,
+        2 => Color::Rgb {
+            r: 151,
+            g: 164,
+            b: 181,
+        },
+        4 => Color::Rgb {
+            r: 124,
+            g: 146,
+            b: 174,
+        },
+        8 | 16 => Color::Rgb {
+            r: 191,
+            g: 101,
+            b: 48,
+        },
+        32 | 64 => Color::Rgb {
+            r: 176,
+            g: 48,
+            b: 78,
+        },
+        128 | 256 => Color::Rgb {
+            r: 102,
+            g: 65,
+            b: 166,
+        },
+        512 | 1024 => Color::Rgb {
+            r: 36,
+            g: 131,
+            b: 125,
+        },
+        _ => Color::Rgb {
+            r: 183,
+            g: 137,
+            b: 30,
+        },
+    }
+}
+
 fn direction_label(direction: Direction) -> &'static str {
     match direction {
         Direction::Up => "UP",
@@ -2045,6 +2541,32 @@ fn roulette_background(color: RouletteColor) -> Color {
     }
 }
 
+fn draw_roulette_chip(
+    buffer: &mut Buffer,
+    rect: Rect,
+    color: RouletteColor,
+    selected: bool,
+    payout: u16,
+) {
+    let base = roulette_background(color);
+    let background = if selected { YELLOW } else { base };
+    let foreground = if selected { BG } else { TEXT };
+    buffer.fill(rect, Paint::new(foreground, background, true));
+    buffer.panel(rect, "", if selected { YELLOW } else { BORDER }, background);
+    buffer.centered_text(
+        rect,
+        rect.y.saturating_add(1),
+        &format!("{} {}", color.symbol(), color.label()),
+        Paint::new(foreground, background, true),
+    );
+    buffer.centered_text(
+        rect,
+        rect.y.saturating_add(2),
+        &format!("{}× PAYOUT", payout),
+        Paint::new(foreground, background, false),
+    );
+}
+
 fn roulette_number_label(number: u8) -> String {
     if number == 37 {
         "00".to_string()
@@ -2055,6 +2577,16 @@ fn roulette_number_label(number: u8) -> String {
 
 fn gambling_feedback_line(app: &App) -> Option<String> {
     app.gambling_feedback.clone()
+}
+
+fn gambling_wager_label(app: &App) -> String {
+    if app.gambling_bet_committed() {
+        format!("BET {} WON", app.gambling_total_wager())
+    } else if app.gambling_bet_input().is_empty() {
+        "BET [____] WON".to_string()
+    } else {
+        format!("BET [{}] WON", app.gambling_bet_input())
+    }
 }
 
 fn result_lines(result: &crate::round::RoundResult, kind: Option<GameKind>) -> Vec<String> {
@@ -2106,6 +2638,11 @@ fn result_lines(result: &crate::round::RoundResult, kind: Option<GameKind>) -> V
             format!("ACCURACY  {}%", result.accuracy_percent()),
             time,
         ],
+        Some(GameKind::Holdem) => vec![
+            format!("PAYOUT  {} WON", result.score),
+            format!("ACTIONS  {}", result.attempts),
+            time,
+        ],
         Some(GameKind::TypingPractice) => vec![
             format!("MINED  {} WON", result.correct_answers),
             format!("ACCURACY  {}%", result.accuracy_percent()),
@@ -2133,10 +2670,11 @@ fn game_summary(game: &GameDefinition) -> &'static str {
         GameKind::TicTacToe => "컴퓨터와 번갈아 두며 3칸을 먼저 연결합니다.",
         GameKind::TwentyFortyEight => "타일을 합쳐 더 큰 숫자를 만들고 2048에 도전합니다.",
         GameKind::Sudoku => "빈칸을 채워 모든 가로·세로·3×3 박스를 완성합니다.",
-        GameKind::Gambling => "블랙잭·룰렛·슬롯머신을 즐기는 아케이드 카지노입니다.",
+        GameKind::Gambling => "블랙잭·룰렛·슬롯·홀덤을 즐기는 아케이드 카지노입니다.",
         GameKind::Blackjack => "카드를 받아 21에 가까워지고 딜러를 이깁니다.",
         GameKind::Roulette => "색을 선택하고 룰렛 결과가 맞으면 배당금을 받습니다.",
         GameKind::Slots => "세 칸의 그림을 맞춰 배당금을 받습니다.",
+        GameKind::Holdem => "AI와 프리플랍부터 리버까지 겨루고 쇼다운에서 족보를 비교합니다.",
         GameKind::TypingPractice => "문장을 정확히 입력할 때마다 1원을 채굴합니다.",
         GameKind::Breakout => "패들로 공을 튕겨 모든 벽돌을 파괴합니다.",
     }
@@ -2153,6 +2691,7 @@ fn stage_description(kind: GameKind, stage: &StageDefinition) -> &'static str {
         GameKind::Blackjack => "히트로 카드를 받고 스탠드로 딜러와 결과를 비교합니다.",
         GameKind::Roulette => "빨강·검정은 2배, 초록은 36배입니다.",
         GameKind::Slots => "같은 그림이 많을수록 높은 배당을 받습니다.",
+        GameKind::Holdem => "C/Enter 체크·콜 · R 레이즈 · F 폴드 · AI 난이도는 매 판 랜덤입니다.",
         GameKind::TypingPractice => "문장 전체가 정확히 일치해야 1원을 받습니다.",
         GameKind::Breakout => "자동으로 움직이는 공을 패들로 받아 벽돌을 모두 부숩니다.",
     }
@@ -2166,9 +2705,10 @@ fn game_controls(kind: GameKind) -> &'static str {
         GameKind::TwentyFortyEight => "방향키/WASD 이동 · Esc 중단",
         GameKind::Sudoku => "방향키 칸 선택 · 숫자 입력 · Backspace 지우기",
         GameKind::Gambling => "스테이지를 선택해 도박 게임을 시작합니다.",
-        GameKind::Blackjack => "Enter/H 히트 · S/Space 스탠드 · Esc 중단",
-        GameKind::Roulette => "1/2/3 색 선택 · Enter 돌리기 · Esc 중단",
-        GameKind::Slots => "Enter/Space 레버 당기기 · Esc 중단",
+        GameKind::Blackjack => "테이블에서 숫자 베팅 · Enter/H 히트 · S/Space 스탠드",
+        GameKind::Roulette => "테이블에서 숫자 베팅 · R/B/G 색 선택 · Enter 돌리기",
+        GameKind::Slots => "테이블에서 숫자 베팅 · Enter/Space 레버 당기기",
+        GameKind::Holdem => "테이블에서 숫자 베팅 · C 체크 · R/T/Y 추가 베팅 · F 폴드",
         GameKind::TypingPractice => "문장 입력 · Enter 제출 · Backspace 수정",
         GameKind::Breakout => "방향키/A-D 패들 이동 · Esc 중단",
     }

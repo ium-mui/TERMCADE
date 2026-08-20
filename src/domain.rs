@@ -17,6 +17,7 @@ pub enum GameKind {
     Blackjack,
     Roulette,
     Slots,
+    Holdem,
     TypingPractice,
     Breakout,
 }
@@ -290,6 +291,16 @@ impl GameModule for GamblingGame {
                     game_kind: GameKind::Slots,
                 },
                 StageDefinition {
+                    id: StageId::new("holdem-1"),
+                    display_name: "텍사스 홀덤 · AI 대전".to_string(),
+                    operation: Operation::Addition,
+                    difficulty_order: 1,
+                    generator: boxed_generator(Operation::Addition, 0..=0),
+                    answer_format: AnswerFormat::Integer,
+                    time_limit: Duration::ZERO,
+                    game_kind: GameKind::Holdem,
+                },
+                StageDefinition {
                     id: StageId::new("typing-mine"),
                     display_name: "타자 채굴".to_string(),
                     operation: Operation::Addition,
@@ -443,12 +454,19 @@ mod tests {
                 .iter()
                 .map(|stage| stage.id.as_str())
                 .collect::<Vec<_>>(),
-            ["blackjack-1", "roulette-1", "slots-1", "typing-mine"]
+            [
+                "blackjack-1",
+                "roulette-1",
+                "slots-1",
+                "holdem-1",
+                "typing-mine",
+            ]
         );
         assert_eq!(gambling.stages[0].game_kind, GameKind::Blackjack);
         assert_eq!(gambling.stages[1].game_kind, GameKind::Roulette);
         assert_eq!(gambling.stages[2].game_kind, GameKind::Slots);
-        assert_eq!(gambling.stages[3].game_kind, GameKind::TypingPractice);
+        assert_eq!(gambling.stages[3].game_kind, GameKind::Holdem);
+        assert_eq!(gambling.stages[4].game_kind, GameKind::TypingPractice);
         assert_eq!(
             catalog.find_game_by_str("breakout").expect("breakout").kind,
             GameKind::Breakout
