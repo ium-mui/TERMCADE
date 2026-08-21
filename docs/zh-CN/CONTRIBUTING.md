@@ -64,6 +64,6 @@ git switch -c fix/42-short-description upstream/main
 
 ## 评审与合并
 
-所有必需 CI 必须通过，至少一名维护者批准，所有评审对话都已解决。通常使用 squash merge；维护者可以调整最终标题，让 Release Please 正确计算版本。
+所有必需 CI 必须通过，所有评审对话都必须解决。有其他维护者时需要一次独立批准。单人维护阶段应在 PR 中记录自我评审，并且只有全部必需检查通过后才能合并。通常使用 squash merge；维护者可以调整最终标题，让 Release Please 正确计算版本。
 
 贡献者保留作品版权，并将提交的贡献以仓库 [MIT License](../../LICENSE)授权。不要求单独的 CLA。

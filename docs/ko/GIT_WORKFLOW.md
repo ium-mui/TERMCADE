@@ -94,7 +94,7 @@ Release Please는 `fix`를 patch, `feat`를 minor, breaking change를 major 릴�
 3. 위험도에 맞는 테스트와 정확한 검증 명령을 포함합니다.
 4. 사용자 동작이 바뀌면 영어 문서와 지원 번역을 갱신합니다.
 5. CI의 `branch-name`, `pr-title`, `quality`, `msrv` 검사를 통과합니다.
-6. 모든 리뷰 대화를 해결하고 유지관리자 한 명 이상의 승인을 받습니다.
+6. 모든 리뷰 대화를 해결합니다. 다른 유지관리자가 있으면 최소 한 명의 승인을 받고, 단독 유지관리 단계에서는 PR에 자체 검토 내용을 기록하고 모든 필수 검사를 통과합니다.
 7. 최신 `main`과 충돌이 없어야 합니다.
 
 일반 기여는 **squash merge**합니다. 의도적으로 정리한 커밋 묶음을 보존할 가치가 있을 때만 **rebase merge**를 사용합니다. merge commit은 비활성화합니다. 병합자는 최종 제목이 Conventional Commit인지 확인합니다.
@@ -103,8 +103,8 @@ Release Please는 `fix`를 patch, `feat`를 minor, breaking change를 major 릴�
 
 저장소 관리자는 `main` ruleset에 다음을 설정합니다.
 
-- PR 필수, 최소 승인 1개
-- 새 커밋이 올라오면 오래된 승인 해제
+- PR은 항상 필수입니다. 유지관리자가 한 명뿐일 때는 필수 승인 수를 0으로 두고, 독립 리뷰어가 생기면 즉시 1로 올립니다.
+- 승인을 사용하기 시작한 뒤 새 커밋이 올라오면 오래된 승인을 해제합니다.
 - 유효한 CODEOWNERS 팀을 만든 뒤 code owner 리뷰 필수
 - 필수 검사: `CI` workflow의 `branch-name`, `pr-title`, `quality`, `msrv`
 - 리뷰 대화 해결 필수
@@ -113,4 +113,4 @@ Release Please는 `fix`를 patch, `feat`를 minor, breaking change를 major 릴�
 - 관리자도 규칙 적용, 긴급 유지관리자만 우회 가능
 - 직접 push 금지
 
-긴급 우회는 후속 이슈에 기록하고 사건 후 검토해야 하며, CI를 기다리지 않으려는 목적으로 사용하면 안 됩니다.
+단독 유지관리 예외도 CI 우회를 허용하지 않습니다. 긴급 우회는 후속 이슈에 기록하고 사건 후 검토해야 하며, CI를 기다리지 않으려는 목적으로 사용하면 안 됩니다.

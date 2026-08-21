@@ -64,6 +64,6 @@ A translation pull request should identify the source revision it reviewed, pres
 
 ## Review and merge
 
-All required CI jobs must pass. At least one maintainer approval and resolution of all review conversations are required. Maintainers normally squash merge and may edit the final title so Release Please can calculate the correct version.
+All required CI jobs must pass and every review conversation must be resolved. An independent maintainer approval is required whenever another maintainer is available. During the solo-maintainer phase, the author records a self-review in the pull request and may merge only after every required check passes. Maintainers normally squash merge and may edit the final title so Release Please can calculate the correct version.
 
 Contributors retain copyright in their work and license submitted contributions under the repository's [MIT License](LICENSE). No separate contributor license agreement is required.

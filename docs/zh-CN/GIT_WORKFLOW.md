@@ -94,7 +94,7 @@ Release Please 将 `fix` 映射为 patch，`feat` 映射为 minor，breaking cha
 3. 提供与风险相称的测试和准确验证命令。
 4. 面向用户的行为变化必须更新英文文档和支持的翻译。
 5. 通过 CI 的 `branch-name`、`pr-title`、`quality` 和 `msrv` 检查。
-6. 解决所有评审对话，并获得至少一名维护者批准。
+6. 解决所有评审对话。有其他维护者时至少获得一次独立批准；单人维护阶段则在 PR 中记录自我评审，并通过全部必需检查。
 7. 与最新 `main` 无冲突。
 
 普通贡献使用 **squash merge**。只有在保留精心整理的提交序列确有价值时才使用 **rebase merge**。禁用 merge commit。合并者必须确保最终标题是 Conventional Commit。
@@ -103,8 +103,8 @@ Release Please 将 `fix` 映射为 patch，`feat` 映射为 minor，breaking cha
 
 仓库管理员应为 `main` 配置 ruleset：
 
-- 必须通过 PR，至少一次批准
-- 新提交后撤销旧批准
+- 始终必须通过 PR。只有一名维护者时所需批准数设为 0；出现独立评审者后立即提高为 1。
+- 启用批准要求后，新提交会撤销旧批准。
 - 建立有效 CODEOWNERS 团队后要求 code owner 评审
 - 必需检查：`CI` workflow 的 `branch-name`、`pr-title`、`quality` 和 `msrv`
 - 必须解决评审对话
@@ -113,4 +113,4 @@ Release Please 将 `fix` 映射为 patch，`feat` 映射为 minor，breaking cha
 - 管理员也受规则约束，只有应急维护者可以绕过
 - 禁止直接 push
 
-紧急绕过必须记录在后续 Issue 中并事后审查，不能只为跳过 CI 等待而使用。
+单人维护例外也不允许绕过 CI。紧急绕过必须记录在后续 Issue 中并事后审查，不能只为跳过 CI 等待而使用。

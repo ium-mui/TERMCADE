@@ -96,7 +96,7 @@ Each pull request must:
 3. Include tests proportional to risk and exact verification commands.
 4. Update English documentation and supported translations for user-visible changes.
 5. Pass `branch-name`, `pr-title`, `quality`, and `msrv` CI checks.
-6. Resolve review conversations and receive at least one approving review from a maintainer.
+6. Resolve every review conversation. When another maintainer is available, receive at least one approval; during the solo-maintainer phase, record a self-review in the pull request and rely on all required checks.
 7. Be current with `main` and have no unresolved conflicts.
 
 Maintainers use **squash merge** for normal contributions. Use **rebase merge** only when preserving a deliberately curated series is valuable. Merge commits are disabled. The person merging must ensure the resulting subject is a valid Conventional Commit.
@@ -105,8 +105,8 @@ Maintainers use **squash merge** for normal contributions. Use **rebase merge** 
 
 Repository administrators configure a branch ruleset for `main` with:
 
-- Pull requests required; one approval minimum.
-- Stale approvals dismissed when new commits are pushed.
+- Pull requests required. Use zero required approvals while the project has only one maintainer, then raise the minimum to one as soon as an independent reviewer is available.
+- Stale approvals dismissed when new commits are pushed once approvals are enabled.
 - Code-owner review required once a valid CODEOWNERS team is established.
 - Required checks: `branch-name`, `pr-title`, `quality`, and `msrv` from the `CI` workflow.
 - Conversation resolution required.
@@ -115,4 +115,4 @@ Repository administrators configure a branch ruleset for `main` with:
 - Administrators included; bypass restricted to emergency maintainers.
 - Direct pushes blocked.
 
-An emergency bypass must be documented in a follow-up issue, reviewed after the incident, and never used merely to avoid waiting for CI.
+The solo-maintainer exception never permits bypassing CI. An emergency bypass must be documented in a follow-up issue, reviewed after the incident, and never used merely to avoid waiting for CI.
