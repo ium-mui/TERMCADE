@@ -19,7 +19,7 @@
 
 ## Documentation and release
 
-- [ ] Relevant supported-language documents are updated or marked for language review
+- [ ] Relevant user-facing documentation is updated
 - [ ] The PR title follows Conventional Commits and describes one logical change
 - [ ] User-visible changes are suitable for the generated changelog
 

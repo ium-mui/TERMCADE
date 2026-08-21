@@ -9,8 +9,6 @@
 
 [English](README.md) · [한국어](README.ko.md) · [简体中文](README.zh-CN.md)
 
-项目文档以三种语言平行维护，并可继续扩展其他语言。
-
 [![CI](https://github.com/ium-mui/TERMCADE/actions/workflows/ci.yml/badge.svg)](https://github.com/ium-mui/TERMCADE/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/ium-mui/TERMCADE)](https://github.com/ium-mui/TERMCADE/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -105,11 +103,10 @@ tcade sudoku hard
 - [开发指南](docs/zh-CN/DEVELOPMENT.md)
 - [Issue、分支、提交与 PR 规则](docs/zh-CN/GIT_WORKFLOW.md)
 - [发布与部署流程](docs/zh-CN/RELEASING.md)
-- [语言支持](docs/zh-CN/TRANSLATIONS.md)
 
 ## 参与贡献
 
-欢迎各种贡献。请先阅读[贡献指南](docs/zh-CN/CONTRIBUTING.md)，在 Issue 中讨论重大变更，并在提交 PR 前运行 `./scripts/check.sh`。文档和 PR 讨论可以使用英语、韩语或简体中文。
+欢迎各种贡献。请先阅读[贡献指南](docs/zh-CN/CONTRIBUTING.md)，在 Issue 中讨论重大变更，并在提交 PR 前运行 `./scripts/check.sh`。
 
 少数安全相关 Bug 请参阅[安全说明](docs/zh-CN/SECURITY.md)。
 

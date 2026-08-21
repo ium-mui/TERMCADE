@@ -11,18 +11,6 @@ body:
       description: Link the file, heading, or page affected.
     validations:
       required: true
-  - type: dropdown
-    id: language
-    attributes:
-      label: Language
-      options:
-        - English
-        - Korean
-        - Simplified Chinese
-        - Multiple languages
-        - New translation
-    validations:
-      required: true
   - type: textarea
     id: problem
     attributes:

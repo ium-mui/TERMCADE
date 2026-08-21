@@ -2,7 +2,7 @@
 
 [English](../../CONTRIBUTING.md) · [한국어](../ko/CONTRIBUTING.md) · [简体中文](CONTRIBUTING.md)
 
-欢迎贡献游戏、测试、文档和翻译。英语、韩语和简体中文都是受支持的文档语言，贡献可以从其中任何一种语言开始。
+欢迎贡献游戏、测试和文档。
 
 ## 开始之前
 
@@ -37,21 +37,17 @@ git switch -c fix/42-short-description upstream/main
 - 保持基于种子的游戏行为可复现。
 - 保持现有历史文件兼容，或提供明确的迁移。
 - 不要加入 `unsafe` 代码、机密、生成的二进制文件或无关修改。
-- 面向用户的修改应同步到相关语言文档。
+- 行为变化时更新用户文档。
 
 ## 分支、提交和 PR
 
 遵循 [Git 工作流](GIT_WORKFLOW.md)。核心规则如下：
 
-- 使用 `feat/new-game`、`fix/history-write`、`docs/zh-cn-controls` 这类带前缀的分支名。
-- 使用 `feat:`、`fix:`、`docs:` 等 Conventional Commit 类型。摘要可以用任一受支持的文档语言清楚书写。
+- 使用 `feat/new-game`、`fix/history-write`、`docs/update-controls` 这类带前缀的分支名。
+- 使用 `feat:`、`fix:`、`docs:` 等 Conventional Commit 类型和清晰的摘要。
 - PR 标题会成为 squash commit，因此必须使用 Conventional Commit 格式。
 - 说明修改内容、原因和验证方式。
 - 每个 PR 只处理一个逻辑修改。
-
-## 文档语言
-
-英语、韩语和简体中文文档是同一项目文档的平行版本。文件位置不会赋予某种语言更高优先级。请从能够准确审阅的语言开始修改，尽量同步相关语言版本；需要帮助时在 PR 中请求语言审阅。详见[语言支持指南](TRANSLATIONS.md)。
 
 ## 合并要求
 

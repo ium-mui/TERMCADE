@@ -2,7 +2,7 @@
 
 [English](CONTRIBUTING.md) · [한국어](docs/ko/CONTRIBUTING.md) · [简体中文](docs/zh-CN/CONTRIBUTING.md)
 
-Contributions to the game, tests, documentation, and translations are welcome. English, Korean, and Simplified Chinese are supported documentation languages; a contribution may start in any of them.
+Contributions to the game, tests, and documentation are welcome.
 
 ## Before starting
 
@@ -37,21 +37,17 @@ See the [development guide](docs/DEVELOPMENT.md) for architecture, tests, persis
 - Keep seeded game behavior reproducible.
 - Preserve compatibility with existing history files, or add an explicit migration.
 - Do not add `unsafe` code, secrets, generated binaries, or unrelated changes.
-- Update the affected language editions of user-facing documentation.
+- Update user-facing documentation when behavior changes.
 
 ## Branches, commits, and pull requests
 
 Follow [GIT_WORKFLOW.md](docs/GIT_WORKFLOW.md). The short version is:
 
-- Use a prefixed branch such as `feat/new-game`, `fix/history-write`, or `docs/ko-controls`.
-- Use a Conventional Commit type such as `feat:`, `fix:`, or `docs:`. The summary may be written clearly in any supported documentation language.
+- Use a prefixed branch such as `feat/new-game`, `fix/history-write`, or `docs/update-controls`.
+- Use a Conventional Commit type such as `feat:`, `fix:`, or `docs:` with a clear summary.
 - Make the pull request title a Conventional Commit because it becomes the squash commit.
 - Explain what changed, why it changed, and how it was verified.
 - Keep one logical change per pull request.
-
-## Documentation languages
-
-The English, Korean, and Simplified Chinese documents are parallel editions of the same project documentation. File placement does not make one edition authoritative. Start a documentation change in the language you can review accurately, update the related editions when possible, and request language review in the pull request when help is needed. See [TRANSLATIONS.md](docs/TRANSLATIONS.md).
 
 ## Merge requirements
 

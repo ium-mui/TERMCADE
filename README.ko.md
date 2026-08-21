@@ -9,8 +9,6 @@ Rust와 가벼운 `crossterm` 렌더러로 만든 터미널 게임 모음입니�
 
 [English](README.md) · [한국어](README.ko.md) · [简体中文](README.zh-CN.md)
 
-프로젝트 문서는 세 언어를 동등한 버전으로 관리하며 다른 언어도 확장할 수 있습니다.
-
 [![CI](https://github.com/ium-mui/TERMCADE/actions/workflows/ci.yml/badge.svg)](https://github.com/ium-mui/TERMCADE/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/ium-mui/TERMCADE)](https://github.com/ium-mui/TERMCADE/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -105,11 +103,10 @@ tcade sudoku hard
 - [개발 가이드](docs/ko/DEVELOPMENT.md)
 - [이슈·브랜치·커밋·PR 규칙](docs/ko/GIT_WORKFLOW.md)
 - [릴리스 및 배포 절차](docs/ko/RELEASING.md)
-- [언어 지원](docs/ko/TRANSLATIONS.md)
 
 ## 기여
 
-모든 기여를 환영합니다. [기여 가이드](docs/ko/CONTRIBUTING.md)를 먼저 읽고, 큰 변경은 이슈에서 논의한 뒤 PR을 열기 전에 `./scripts/check.sh`를 실행해 주세요. 문서와 PR 논의는 영어·한국어·중국어 간체 중 어느 언어로든 작성할 수 있습니다.
+모든 기여를 환영합니다. [기여 가이드](docs/ko/CONTRIBUTING.md)를 먼저 읽고, 큰 변경은 이슈에서 논의한 뒤 PR을 열기 전에 `./scripts/check.sh`를 실행해 주세요.
 
 보안과 직접 관련된 일부 버그는 [보안 안내](docs/ko/SECURITY.md)를 확인하세요.
 

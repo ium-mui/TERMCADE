@@ -10,7 +10,7 @@
 
 - **Bug report**: 재현 가능한 잘못된 동작
 - **Feature request**: 새 게임이나 동작
-- **Documentation issue**: 누락되거나 잘못되었거나 번역되지 않은 내용
+- **Documentation issue**: 누락되거나 잘못되었거나 오래된 내용
 
 작고 명확한 수정은 바로 PR을 열어도 됩니다. 버그에는 재현 절차를, 기능에는 기대 결과를 적습니다. 보안과 직접 관련된 버그만 간단한 [보안 안내](SECURITY.md)를 따릅니다.
 
@@ -30,7 +30,7 @@ git switch -c feat/new-game
 | --- | --- |
 | `feat/` | 새 동작 |
 | `fix/` | 버그 수정 |
-| `docs/` | 문서 또는 언어 작업 |
+| `docs/` | 문서 작업 |
 | `refactor/` | 내부 구조 변경 |
 | `test/` | 테스트 전용 변경 |
 | `build/` | 의존성 또는 패키징 |
@@ -47,12 +47,12 @@ Conventional Commits 형식을 사용합니다.
 <type>[optional scope][!]: <summary>
 ```
 
-지원 유형은 `feat`, `fix`, `docs`, `refactor`, `test`, `perf`, `build`, `ci`, `chore`, `revert`입니다. 릴리스 도구가 읽는 유형과 선택적 scope는 ASCII로 유지하고, 요약은 영어·한국어·중국어 간체 중 하나로 명확하게 작성할 수 있습니다.
+지원 유형은 `feat`, `fix`, `docs`, `refactor`, `test`, `perf`, `build`, `ci`, `chore`, `revert`입니다. 릴리스 도구가 읽는 유형과 선택적 scope는 ASCII로 유지하고, 요약은 명확하고 간결하게 작성합니다.
 
 ```text
 feat(maze): add deterministic abyss stage
-fix(history): 기록 저장 실패 시 지갑 상태 유지
-docs(zh-CN): 补充扫雷操作说明
+fix(history): preserve wallet after a failed write
+docs: clarify minesweeper controls
 ```
 
 호환되지 않는 변경은 `!` 또는 `BREAKING CHANGE:` footer로 표시합니다. 비밀 정보, 생성된 릴리스 압축 파일, 무관한 포맷 변경은 커밋하지 않습니다.
@@ -62,11 +62,11 @@ docs(zh-CN): 补充扫雷操作说明
 - PR 하나에는 논리적인 변경 하나만 담습니다.
 - squash 커밋이 되는 PR 제목은 Conventional Commit 형식을 사용합니다.
 - 목적, 중요한 구현 선택, 검증 방법을 설명합니다.
-- 변경된 동작에는 테스트를 추가하고 사용자 문서는 관련 언어 버전을 갱신합니다.
+- 변경된 동작에는 테스트를 추가하고 관련 사용자 문서를 갱신합니다.
 - 로컬에서 `./scripts/check.sh`를 실행합니다.
 - 리뷰 대화를 해결하고 `main`이 변경되면 브랜치를 최신화합니다.
 
-PR 설명과 리뷰는 지원 문서 언어 중 어느 언어로든 작성할 수 있습니다. 코드 식별자와 명령은 정확히 적어 언어와 관계없이 변경을 검증할 수 있게 합니다.
+코드 식별자와 명령은 정확히 적어 변경을 쉽게 검증할 수 있게 합니다.
 
 ## 보호된 `main`
 

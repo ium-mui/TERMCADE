@@ -10,7 +10,7 @@ Use an issue when a change needs discussion or tracking:
 
 - **Bug report** for reproducible incorrect behavior.
 - **Feature request** for a new game or behavior.
-- **Documentation issue** for missing, incorrect, or untranslated content.
+- **Documentation issue** for missing, incorrect, or outdated content.
 
 Small, obvious fixes may go directly to a pull request. Include reproduction steps for bugs and a clear expected result for features. Use the short [security guide](../SECURITY.md) only for security-sensitive bugs.
 
@@ -30,7 +30,7 @@ Use lowercase ASCII kebab-case because branch names are consumed by tooling. Com
 | --- | --- |
 | `feat/` | New behavior |
 | `fix/` | Bug fix |
-| `docs/` | Documentation or language work |
+| `docs/` | Documentation |
 | `refactor/` | Internal restructuring |
 | `test/` | Test-only change |
 | `build/` | Dependencies or packaging |
@@ -47,14 +47,14 @@ Use Conventional Commits:
 <type>[optional scope][!]: <summary>
 ```
 
-Supported types are `feat`, `fix`, `docs`, `refactor`, `test`, `perf`, `build`, `ci`, `chore`, and `revert`. The type and optional scope stay in ASCII for release tooling; the summary may be written clearly in English, Korean, or Simplified Chinese.
+Supported types are `feat`, `fix`, `docs`, `refactor`, `test`, `perf`, `build`, `ci`, `chore`, and `revert`. Keep the type and optional scope in ASCII for release tooling, and write a clear, concise summary.
 
 Examples:
 
 ```text
 feat(maze): add deterministic abyss stage
-fix(history): 기록 저장 실패 시 지갑 상태 유지
-docs(zh-CN): 补充扫雷操作说明
+fix(history): preserve wallet after a failed write
+docs: clarify minesweeper controls
 ```
 
 Use `!` or a `BREAKING CHANGE:` footer for an incompatible change. Never commit secrets, generated release archives, or unrelated formatting.
@@ -64,11 +64,11 @@ Use `!` or a `BREAKING CHANGE:` footer for an incompatible change. Never commit 
 - Keep one logical change per pull request.
 - Use a Conventional Commit title; squash merge uses it as the final commit.
 - Explain the purpose, important implementation choices, and verification performed.
-- Add tests for changed behavior and update relevant language editions of user-facing documentation.
+- Add tests for changed behavior and update relevant user-facing documentation.
 - Run `./scripts/check.sh` locally.
 - Resolve review conversations and update the branch when `main` has moved.
 
-Pull request descriptions and review discussions may use any supported documentation language. Use precise code identifiers and commands so the change remains easy to verify across languages.
+Use precise code identifiers and commands so the change is easy to verify.
 
 ## Protected `main`
 
