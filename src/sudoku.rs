@@ -11,7 +11,39 @@ use crate::round::{Clock, RoundResult, RoundStatus, SystemClock};
 
 pub const SUDOKU_SIZE: usize = 9;
 const CELL_COUNT: usize = SUDOKU_SIZE * SUDOKU_SIZE;
-const TARGET_CLUES: usize = 40;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SudokuDifficulty {
+    Easy,
+    Classic,
+    Hard,
+}
+
+impl SudokuDifficulty {
+    fn from_stage_id(stage_id: &StageId) -> Self {
+        match stage_id.as_str() {
+            "easy" => Self::Easy,
+            "hard" => Self::Hard,
+            _ => Self::Classic,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Easy => "EASY",
+            Self::Classic => "CLASSIC",
+            Self::Hard => "HARD",
+        }
+    }
+
+    pub fn target_clues(self) -> usize {
+        match self {
+            Self::Easy => 46,
+            Self::Classic => 40,
+            Self::Hard => 32,
+        }
+    }
+}
 
 pub struct SudokuSession {
     game_id: GameId,
@@ -19,6 +51,7 @@ pub struct SudokuSession {
     started_at: DateTime<Utc>,
     started_instant: Instant,
     clock: Arc<dyn Clock>,
+    difficulty: SudokuDifficulty,
     solution: [u8; CELL_COUNT],
     puzzle: [u8; CELL_COUNT],
     board: [u8; CELL_COUNT],
@@ -47,9 +80,10 @@ impl SudokuSession {
         seed: u64,
         clock: Arc<dyn Clock>,
     ) -> Self {
+        let difficulty = SudokuDifficulty::from_stage_id(&stage_id);
         let mut rng = StdRng::seed_from_u64(seed);
         let solution = generate_solution(&mut rng);
-        let puzzle = generate_puzzle(solution, &mut rng);
+        let puzzle = generate_puzzle(solution, &mut rng, difficulty.target_clues());
         let givens = puzzle.map(|value| value != 0);
         let started_instant = clock.now();
         Self {
@@ -58,6 +92,7 @@ impl SudokuSession {
             started_at: Utc::now(),
             started_instant,
             clock,
+            difficulty,
             solution,
             puzzle,
             board: puzzle,
@@ -74,6 +109,10 @@ impl SudokuSession {
 
     pub fn board(&self) -> &[u8; CELL_COUNT] {
         &self.board
+    }
+
+    pub fn difficulty(&self) -> SudokuDifficulty {
+        self.difficulty
     }
 
     pub fn puzzle(&self) -> &[u8; CELL_COUNT] {
@@ -275,13 +314,17 @@ fn shuffled_units(rng: &mut StdRng) -> [usize; SUDOKU_SIZE] {
     result
 }
 
-fn generate_puzzle(solution: [u8; CELL_COUNT], rng: &mut StdRng) -> [u8; CELL_COUNT] {
+fn generate_puzzle(
+    solution: [u8; CELL_COUNT],
+    rng: &mut StdRng,
+    target_clues: usize,
+) -> [u8; CELL_COUNT] {
     let mut puzzle = solution;
     let mut cells: Vec<_> = (0..CELL_COUNT).collect();
     cells.shuffle(rng);
     let mut clues = CELL_COUNT;
     for index in cells {
-        if clues <= TARGET_CLUES {
+        if clues <= target_clues {
             break;
         }
         let saved = puzzle[index];
@@ -360,20 +403,21 @@ mod tests {
 
     #[test]
     fn generated_puzzle_has_a_unique_solution_and_valid_clues() {
-        let (game_id, stage_id) = ids();
-        let session = SudokuSession::with_seed(game_id, stage_id, 42);
-        let clues = session.puzzle().iter().filter(|value| **value != 0).count();
-        assert!(clues >= TARGET_CLUES);
-        assert!(clues < CELL_COUNT);
-        assert!(
-            session
-                .puzzle()
-                .iter()
-                .enumerate()
-                .all(|(index, value)| *value == 0 || *value == session.solution()[index])
-        );
-        let mut candidate = *session.puzzle();
-        assert_eq!(count_solutions(&mut candidate, 2), 1);
+        for stage in ["easy", "classic-1", "hard"] {
+            let session = SudokuSession::with_seed(GameId::new("sudoku"), StageId::new(stage), 42);
+            let clues = session.puzzle().iter().filter(|value| **value != 0).count();
+            assert!(clues >= session.difficulty().target_clues(), "{stage}");
+            assert!(clues < CELL_COUNT);
+            assert!(
+                session
+                    .puzzle()
+                    .iter()
+                    .enumerate()
+                    .all(|(index, value)| *value == 0 || *value == session.solution()[index])
+            );
+            let mut candidate = *session.puzzle();
+            assert_eq!(count_solutions(&mut candidate, 2), 1, "{stage}");
+        }
     }
 
     #[test]
@@ -414,5 +458,18 @@ mod tests {
         assert_eq!(result.status, RoundStatus::Completed);
         assert!(session.is_complete());
         assert_eq!(session.board(), &solution);
+    }
+
+    #[test]
+    fn stages_change_the_number_of_given_cells() {
+        let easy = SudokuSession::with_seed(GameId::new("sudoku"), StageId::new("easy"), 123);
+        let classic =
+            SudokuSession::with_seed(GameId::new("sudoku"), StageId::new("classic-1"), 123);
+        let hard = SudokuSession::with_seed(GameId::new("sudoku"), StageId::new("hard"), 123);
+        let clues =
+            |session: &SudokuSession| session.puzzle().iter().filter(|value| **value != 0).count();
+        assert!(clues(&easy) >= clues(&classic));
+        assert!(clues(&classic) >= clues(&hard));
+        assert_eq!(hard.difficulty(), SudokuDifficulty::Hard);
     }
 }

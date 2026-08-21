@@ -1,0 +1,34 @@
+name: Documentation issue
+description: Report missing, incorrect, or outdated documentation.
+title: "docs: "
+labels:
+  - documentation
+body:
+  - type: input
+    id: location
+    attributes:
+      label: Document location
+      description: Link the file, heading, or page affected.
+    validations:
+      required: true
+  - type: dropdown
+    id: language
+    attributes:
+      label: Language
+      options:
+        - English (canonical)
+        - Korean
+        - Simplified Chinese
+        - New translation
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is wrong or missing?
+    validations:
+      required: true
+  - type: textarea
+    id: change
+    attributes:
+      label: Suggested change

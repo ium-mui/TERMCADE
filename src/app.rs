@@ -1,21 +1,20 @@
-use std::io;
 use std::time::{Duration, Instant};
 
-use crossterm::cursor::{Hide, Show};
-use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
-use crossterm::execute;
-use crossterm::style::ResetColor;
-use crossterm::terminal::{
-    EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
-};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::blackjack::BlackjackSession;
 use crate::breakout::BreakoutSession;
+use crate::casino::{CardHandPhase, CasinoState};
 use crate::cli::CliRoute;
+use crate::connect_four::ConnectFourSession;
 use crate::domain::{GameCatalog, GameId, GameKind, StageId};
 use crate::game_2048::Game2048Session;
+use crate::game_session::GameSession;
 use crate::history::{HistoryStore, PlayRecord};
 use crate::holdem::{HoldemAction, HoldemSession};
+use crate::maze::MazeSession;
+use crate::memory_match::MemoryMatchSession;
+use crate::minesweeper::MinesweeperSession;
 use crate::roulette::{RouletteColor, RouletteSession};
 use crate::round::{RoundResult, RoundSession, SubmissionOutcome};
 use crate::slots::SlotsSession;
@@ -23,7 +22,6 @@ use crate::snake::{Direction, SnakeSession};
 use crate::sudoku::SudokuSession;
 use crate::tictactoe::TicTacToeSession;
 use crate::typing::{TypingPracticeSession, TypingSubmission};
-use crate::ui;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Screen {
@@ -35,34 +33,19 @@ pub enum Screen {
 }
 
 pub struct App {
-    pub catalog: GameCatalog,
-    pub screen: Screen,
-    pub selected_game: usize,
-    pub selected_stage: usize,
-    pub session: Option<RoundSession>,
-    pub snake_session: Option<SnakeSession>,
-    pub tictactoe_session: Option<TicTacToeSession>,
-    pub game2048_session: Option<Game2048Session>,
-    pub sudoku_session: Option<SudokuSession>,
-    pub blackjack_session: Option<BlackjackSession>,
-    pub roulette_session: Option<RouletteSession>,
-    pub slots_session: Option<SlotsSession>,
-    pub holdem_session: Option<HoldemSession>,
-    pub typing_session: Option<TypingPracticeSession>,
-    pub breakout_session: Option<BreakoutSession>,
-    pub wallet_won: u64,
-    gambling_bet: u64,
-    gambling_bet_input: String,
-    gambling_total_wager: u64,
-    gambling_bet_committed: bool,
-    card_hand_betting_open: bool,
-    card_hand_started: bool,
-    pub gambling_feedback: Option<String>,
+    catalog: GameCatalog,
+    screen: Screen,
+    selected_game: usize,
+    selected_stage: usize,
+    active_session: Option<GameSession>,
+    wallet_won: u64,
+    casino: CasinoState,
+    gambling_feedback: Option<String>,
     roulette_spin_until: Option<Instant>,
     roulette_spin_frame: usize,
-    pub result: Option<RoundResult>,
-    pub status_message: Option<String>,
-    pub should_quit: bool,
+    result: Option<RoundResult>,
+    status_message: Option<String>,
+    should_quit: bool,
     history: Box<dyn HistoryStore>,
     history_records: Vec<PlayRecord>,
     history_error: Option<String>,
@@ -111,24 +94,9 @@ impl App {
             screen,
             selected_game,
             selected_stage,
-            session: None,
-            snake_session: None,
-            tictactoe_session: None,
-            game2048_session: None,
-            sudoku_session: None,
-            blackjack_session: None,
-            roulette_session: None,
-            slots_session: None,
-            holdem_session: None,
-            typing_session: None,
-            breakout_session: None,
+            active_session: None,
             wallet_won,
-            gambling_bet: 0,
-            gambling_bet_input: String::new(),
-            gambling_total_wager: 0,
-            gambling_bet_committed: false,
-            card_hand_betting_open: false,
-            card_hand_started: false,
+            casino: CasinoState::default(),
             gambling_feedback: None,
             roulette_spin_until: None,
             roulette_spin_frame: 0,
@@ -143,6 +111,34 @@ impl App {
 
     pub fn screen(&self) -> Screen {
         self.screen
+    }
+
+    pub fn catalog(&self) -> &GameCatalog {
+        &self.catalog
+    }
+
+    pub fn selected_game_index(&self) -> usize {
+        self.selected_game
+    }
+
+    pub fn selected_stage_index(&self) -> usize {
+        self.selected_stage
+    }
+
+    pub fn result(&self) -> Option<&RoundResult> {
+        self.result.as_ref()
+    }
+
+    pub fn status_message(&self) -> Option<&str> {
+        self.status_message.as_deref()
+    }
+
+    pub fn gambling_feedback(&self) -> Option<&str> {
+        self.gambling_feedback.as_deref()
+    }
+
+    pub fn should_quit(&self) -> bool {
+        self.should_quit
     }
 
     pub fn selected_game_definition(&self) -> Option<&crate::domain::GameDefinition> {
@@ -187,27 +183,113 @@ impl App {
     }
 
     pub fn gambling_bet(&self) -> u64 {
-        self.gambling_bet
+        self.casino.bet()
     }
 
     pub fn gambling_bet_input(&self) -> &str {
-        &self.gambling_bet_input
+        self.casino.bet_input()
     }
 
     pub fn gambling_total_wager(&self) -> u64 {
-        self.gambling_total_wager
+        self.casino.total_wager()
     }
 
     pub fn gambling_bet_committed(&self) -> bool {
-        self.gambling_bet_committed
+        self.casino.bet_committed()
     }
 
     pub fn card_hand_betting_open(&self) -> bool {
-        self.card_hand_betting_open
+        self.casino.card_phase() != CardHandPhase::Covered
     }
 
     pub fn card_hand_started(&self) -> bool {
-        self.card_hand_started
+        self.casino.card_phase() == CardHandPhase::Playing
+    }
+
+    pub fn active_game_kind(&self) -> Option<GameKind> {
+        self.active_session.as_ref().map(GameSession::kind)
+    }
+
+    pub fn round_session(&self) -> Option<&RoundSession> {
+        self.active_session
+            .as_ref()
+            .and_then(GameSession::as_arithmetic)
+    }
+
+    pub fn snake_session(&self) -> Option<&SnakeSession> {
+        self.active_session.as_ref().and_then(GameSession::as_snake)
+    }
+
+    pub fn tictactoe_session(&self) -> Option<&TicTacToeSession> {
+        self.active_session
+            .as_ref()
+            .and_then(GameSession::as_tictactoe)
+    }
+
+    pub fn game2048_session(&self) -> Option<&Game2048Session> {
+        self.active_session.as_ref().and_then(GameSession::as_2048)
+    }
+
+    pub fn sudoku_session(&self) -> Option<&SudokuSession> {
+        self.active_session
+            .as_ref()
+            .and_then(GameSession::as_sudoku)
+    }
+
+    pub fn blackjack_session(&self) -> Option<&BlackjackSession> {
+        self.active_session
+            .as_ref()
+            .and_then(GameSession::as_blackjack)
+    }
+
+    pub fn roulette_session(&self) -> Option<&RouletteSession> {
+        self.active_session
+            .as_ref()
+            .and_then(GameSession::as_roulette)
+    }
+
+    pub fn slots_session(&self) -> Option<&SlotsSession> {
+        self.active_session.as_ref().and_then(GameSession::as_slots)
+    }
+
+    pub fn holdem_session(&self) -> Option<&HoldemSession> {
+        self.active_session
+            .as_ref()
+            .and_then(GameSession::as_holdem)
+    }
+
+    pub fn typing_session(&self) -> Option<&TypingPracticeSession> {
+        self.active_session
+            .as_ref()
+            .and_then(GameSession::as_typing)
+    }
+
+    pub fn breakout_session(&self) -> Option<&BreakoutSession> {
+        self.active_session
+            .as_ref()
+            .and_then(GameSession::as_breakout)
+    }
+
+    pub fn minesweeper_session(&self) -> Option<&MinesweeperSession> {
+        self.active_session
+            .as_ref()
+            .and_then(GameSession::as_minesweeper)
+    }
+
+    pub fn connect_four_session(&self) -> Option<&ConnectFourSession> {
+        self.active_session
+            .as_ref()
+            .and_then(GameSession::as_connect_four)
+    }
+
+    pub fn memory_match_session(&self) -> Option<&MemoryMatchSession> {
+        self.active_session
+            .as_ref()
+            .and_then(GameSession::as_memory_match)
+    }
+
+    pub fn maze_session(&self) -> Option<&MazeSession> {
+        self.active_session.as_ref().and_then(GameSession::as_maze)
     }
 
     pub fn roulette_is_spinning(&self) -> bool {
@@ -240,20 +322,7 @@ impl App {
                 return;
             }
         }
-        let snake_result = self.snake_session.as_mut().and_then(SnakeSession::tick);
-        if let Some(result) = snake_result {
-            self.finish_with_result(result);
-            return;
-        }
-        let breakout_result = self
-            .breakout_session
-            .as_mut()
-            .and_then(BreakoutSession::tick);
-        if let Some(result) = breakout_result {
-            self.finish_with_result(result);
-            return;
-        }
-        let result = self.session.as_mut().and_then(RoundSession::check_timeout);
+        let result = self.active_session.as_mut().and_then(GameSession::tick);
         if let Some(result) = result {
             self.finish_with_result(result);
         }
@@ -326,19 +395,13 @@ impl App {
     fn handle_gambling_bet_input(&mut self, key: KeyEvent) -> bool {
         match key.code {
             KeyCode::Char(character) if character.is_ascii_digit() => {
-                if self.gambling_bet_input.len() < 19 {
-                    if self.gambling_bet_input == "0" {
-                        self.gambling_bet_input.clear();
-                    }
-                    self.gambling_bet_input.push(character);
-                    self.sync_gambling_bet();
+                if self.casino.push_bet_digit(character) {
                     self.status_message = None;
                 }
                 true
             }
             KeyCode::Backspace => {
-                self.gambling_bet_input.pop();
-                self.sync_gambling_bet();
+                self.casino.backspace_bet();
                 self.status_message = None;
                 true
             }
@@ -346,52 +409,33 @@ impl App {
         }
     }
 
-    fn sync_gambling_bet(&mut self) {
-        self.gambling_bet = self.gambling_bet_input.parse().unwrap_or(0);
+    fn handle_playing(&mut self, key: KeyEvent) {
+        match self.active_game_kind() {
+            Some(GameKind::Arithmetic) => self.handle_arithmetic_key(key),
+            Some(GameKind::Snake) => self.handle_snake_key(key),
+            Some(GameKind::TicTacToe) => self.handle_tictactoe_key(key),
+            Some(GameKind::TwentyFortyEight) => self.handle_2048_key(key),
+            Some(GameKind::Sudoku) => self.handle_sudoku_key(key),
+            Some(GameKind::Blackjack) => self.handle_blackjack_key(key),
+            Some(GameKind::Roulette) => self.handle_roulette_key(key),
+            Some(GameKind::Slots) => self.handle_slots_key(key),
+            Some(GameKind::Holdem) => self.handle_holdem_key(key),
+            Some(GameKind::TypingPractice) => self.handle_typing_key(key),
+            Some(GameKind::Breakout) => self.handle_breakout_key(key),
+            Some(GameKind::Minesweeper) => self.handle_minesweeper_key(key),
+            Some(GameKind::ConnectFour) => self.handle_connect_four_key(key),
+            Some(GameKind::MemoryMatch) => self.handle_memory_match_key(key),
+            Some(GameKind::Maze) => self.handle_maze_key(key),
+            Some(GameKind::Gambling) | None => self.screen = Screen::Ready,
+        }
     }
 
-    fn handle_playing(&mut self, key: KeyEvent) {
-        if self.snake_session.is_some() {
-            self.handle_snake_key(key);
-            return;
-        }
-        if self.tictactoe_session.is_some() {
-            self.handle_tictactoe_key(key);
-            return;
-        }
-        if self.game2048_session.is_some() {
-            self.handle_2048_key(key);
-            return;
-        }
-        if self.sudoku_session.is_some() {
-            self.handle_sudoku_key(key);
-            return;
-        }
-        if self.blackjack_session.is_some() {
-            self.handle_blackjack_key(key);
-            return;
-        }
-        if self.roulette_session.is_some() {
-            self.handle_roulette_key(key);
-            return;
-        }
-        if self.slots_session.is_some() {
-            self.handle_slots_key(key);
-            return;
-        }
-        if self.holdem_session.is_some() {
-            self.handle_holdem_key(key);
-            return;
-        }
-        if self.typing_session.is_some() {
-            self.handle_typing_key(key);
-            return;
-        }
-        if self.breakout_session.is_some() {
-            self.handle_breakout_key(key);
-            return;
-        }
-        let Some(session) = self.session.as_mut() else {
+    fn handle_arithmetic_key(&mut self, key: KeyEvent) {
+        let Some(session) = self
+            .active_session
+            .as_mut()
+            .and_then(GameSession::as_arithmetic_mut)
+        else {
             self.screen = Screen::Ready;
             return;
         };
@@ -425,7 +469,11 @@ impl App {
     }
 
     fn handle_snake_key(&mut self, key: KeyEvent) {
-        let Some(session) = self.snake_session.as_mut() else {
+        let Some(session) = self
+            .active_session
+            .as_mut()
+            .and_then(GameSession::as_snake_mut)
+        else {
             self.screen = Screen::Ready;
             return;
         };
@@ -449,7 +497,11 @@ impl App {
     }
 
     fn handle_tictactoe_key(&mut self, key: KeyEvent) {
-        let Some(session) = self.tictactoe_session.as_mut() else {
+        let Some(session) = self
+            .active_session
+            .as_mut()
+            .and_then(GameSession::as_tictactoe_mut)
+        else {
             self.screen = Screen::Ready;
             return;
         };
@@ -480,7 +532,11 @@ impl App {
     }
 
     fn handle_2048_key(&mut self, key: KeyEvent) {
-        let Some(session) = self.game2048_session.as_mut() else {
+        let Some(session) = self
+            .active_session
+            .as_mut()
+            .and_then(GameSession::as_2048_mut)
+        else {
             self.screen = Screen::Ready;
             return;
         };
@@ -498,15 +554,19 @@ impl App {
             }
             _ => None,
         };
-        if let Some(direction) = direction
-            && let Some(result) = session.move_direction(direction)
-        {
-            self.finish_with_result(result);
+        if let Some(direction) = direction {
+            if let Some(result) = session.move_direction(direction) {
+                self.finish_with_result(result);
+            }
         }
     }
 
     fn handle_sudoku_key(&mut self, key: KeyEvent) {
-        let Some(session) = self.sudoku_session.as_mut() else {
+        let Some(session) = self
+            .active_session
+            .as_mut()
+            .and_then(GameSession::as_sudoku_mut)
+        else {
             self.screen = Screen::Ready;
             return;
         };
@@ -575,20 +635,20 @@ impl App {
             self.exit_gambling();
             return;
         }
-        if !self.card_hand_betting_open {
+        if self.casino.card_phase() == CardHandPhase::Covered {
             if key.code == KeyCode::Enter {
-                self.card_hand_betting_open = true;
+                self.casino.open_card_betting();
                 self.status_message =
                     Some("베팅 금액을 입력한 뒤 Enter로 패를 공개하세요.".to_string());
             }
             return;
         }
-        if !self.card_hand_started {
+        if self.casino.card_phase() == CardHandPhase::Betting {
             if self.handle_gambling_bet_input(key) {
                 return;
             }
             if key.code == KeyCode::Enter && self.commit_gambling_bet() {
-                self.card_hand_started = true;
+                self.casino.start_card_hand();
                 self.status_message = None;
             }
             return;
@@ -604,7 +664,11 @@ impl App {
         if !self.commit_gambling_bet() {
             return;
         }
-        let Some(session) = self.blackjack_session.as_mut() else {
+        let Some(session) = self
+            .active_session
+            .as_mut()
+            .and_then(GameSession::as_blackjack_mut)
+        else {
             self.screen = Screen::Ready;
             return;
         };
@@ -629,29 +693,32 @@ impl App {
         if self.roulette_is_spinning() {
             return;
         }
-        if self.roulette_session.is_none() {
+        if self.roulette_session().is_none() {
             self.screen = Screen::Ready;
             return;
         }
-        if !self.gambling_bet_committed && self.handle_gambling_bet_input(key) {
+        if !self.casino.bet_committed() && self.handle_gambling_bet_input(key) {
             return;
         }
         match key.code {
             KeyCode::Char('r') => {
-                self.roulette_session
+                self.active_session
                     .as_mut()
+                    .and_then(GameSession::as_roulette_mut)
                     .expect("roulette session")
                     .choose(RouletteColor::Red);
             }
             KeyCode::Char('b') => {
-                self.roulette_session
+                self.active_session
                     .as_mut()
+                    .and_then(GameSession::as_roulette_mut)
                     .expect("roulette session")
                     .choose(RouletteColor::Black);
             }
             KeyCode::Char('g') => {
-                self.roulette_session
+                self.active_session
                     .as_mut()
+                    .and_then(GameSession::as_roulette_mut)
                     .expect("roulette session")
                     .choose(RouletteColor::Green);
             }
@@ -668,13 +735,17 @@ impl App {
             self.exit_gambling();
             return;
         }
-        if !self.gambling_bet_committed && self.handle_gambling_bet_input(key) {
+        if !self.casino.bet_committed() && self.handle_gambling_bet_input(key) {
             return;
         }
         if matches!(key.code, KeyCode::Enter | KeyCode::Char(' ')) && !self.commit_gambling_bet() {
             return;
         }
-        let Some(session) = self.slots_session.as_mut() else {
+        let Some(session) = self
+            .active_session
+            .as_mut()
+            .and_then(GameSession::as_slots_mut)
+        else {
             self.screen = Screen::Ready;
             return;
         };
@@ -695,24 +766,24 @@ impl App {
             self.exit_gambling();
             return;
         }
-        if self.holdem_session.is_none() {
+        if self.holdem_session().is_none() {
             self.screen = Screen::Ready;
             return;
         }
-        if !self.card_hand_betting_open {
+        if self.casino.card_phase() == CardHandPhase::Covered {
             if key.code == KeyCode::Enter {
-                self.card_hand_betting_open = true;
+                self.casino.open_card_betting();
                 self.status_message =
                     Some("베팅 금액을 입력한 뒤 Enter로 카드를 공개하세요.".to_string());
             }
             return;
         }
-        if !self.card_hand_started {
+        if self.casino.card_phase() == CardHandPhase::Betting {
             if self.handle_gambling_bet_input(key) {
                 return;
             }
             if key.code == KeyCode::Enter && self.commit_gambling_bet() {
-                self.card_hand_started = true;
+                self.casino.start_card_hand();
                 self.status_message = None;
             }
             return;
@@ -733,14 +804,15 @@ impl App {
         if !self.commit_gambling_bet() {
             return;
         }
-        if let HoldemAction::Raise(amount) = action
-            && !self.add_holdem_wager(amount)
-        {
-            return;
+        if let HoldemAction::Raise(amount) = action {
+            if !self.add_holdem_wager(amount) {
+                return;
+            }
         }
         if let Some(result) = self
-            .holdem_session
+            .active_session
             .as_mut()
+            .and_then(GameSession::as_holdem_mut)
             .and_then(|session| session.act(action))
         {
             self.finish_gambling_round(result);
@@ -750,15 +822,20 @@ impl App {
     fn handle_typing_key(&mut self, key: KeyEvent) {
         if matches!(key.code, KeyCode::Esc | KeyCode::Char('q')) {
             let result = self
-                .typing_session
+                .active_session
                 .as_mut()
+                .and_then(GameSession::as_typing_mut)
                 .and_then(TypingPracticeSession::finish_abandoned);
             if let Some(result) = result {
                 self.finish_with_result(result);
             }
             return;
         }
-        let Some(session) = self.typing_session.as_mut() else {
+        let Some(session) = self
+            .active_session
+            .as_mut()
+            .and_then(GameSession::as_typing_mut)
+        else {
             self.screen = Screen::Ready;
             return;
         };
@@ -793,7 +870,11 @@ impl App {
     }
 
     fn handle_breakout_key(&mut self, key: KeyEvent) {
-        let Some(session) = self.breakout_session.as_mut() else {
+        let Some(session) = self
+            .active_session
+            .as_mut()
+            .and_then(GameSession::as_breakout_mut)
+        else {
             self.screen = Screen::Ready;
             return;
         };
@@ -811,6 +892,137 @@ impl App {
         };
         if delta != 0 {
             session.move_paddle(delta);
+        }
+    }
+
+    fn handle_minesweeper_key(&mut self, key: KeyEvent) {
+        let Some(session) = self
+            .active_session
+            .as_mut()
+            .and_then(GameSession::as_minesweeper_mut)
+        else {
+            self.screen = Screen::Ready;
+            return;
+        };
+        let result = match key.code {
+            KeyCode::Up | KeyCode::Char('w') => {
+                session.move_cursor(0, -1);
+                None
+            }
+            KeyCode::Down | KeyCode::Char('s') => {
+                session.move_cursor(0, 1);
+                None
+            }
+            KeyCode::Left | KeyCode::Char('a') => {
+                session.move_cursor(-1, 0);
+                None
+            }
+            KeyCode::Right | KeyCode::Char('d') => {
+                session.move_cursor(1, 0);
+                None
+            }
+            KeyCode::Enter | KeyCode::Char(' ') => session.reveal(),
+            KeyCode::Char('f') => {
+                session.toggle_flag();
+                None
+            }
+            KeyCode::Esc | KeyCode::Char('q') => session.finish_abandoned(),
+            _ => None,
+        };
+        if let Some(result) = result {
+            self.finish_with_result(result);
+        }
+    }
+
+    fn handle_connect_four_key(&mut self, key: KeyEvent) {
+        let Some(session) = self
+            .active_session
+            .as_mut()
+            .and_then(GameSession::as_connect_four_mut)
+        else {
+            self.screen = Screen::Ready;
+            return;
+        };
+        let result = match key.code {
+            KeyCode::Left | KeyCode::Char('a') => {
+                session.move_cursor(-1);
+                None
+            }
+            KeyCode::Right | KeyCode::Char('d') => {
+                session.move_cursor(1);
+                None
+            }
+            KeyCode::Enter | KeyCode::Char(' ') => session.drop_disc(),
+            KeyCode::Esc | KeyCode::Char('q') => session.finish_abandoned(),
+            _ => None,
+        };
+        if let Some(result) = result {
+            self.finish_with_result(result);
+        }
+    }
+
+    fn handle_memory_match_key(&mut self, key: KeyEvent) {
+        let Some(session) = self
+            .active_session
+            .as_mut()
+            .and_then(GameSession::as_memory_match_mut)
+        else {
+            self.screen = Screen::Ready;
+            return;
+        };
+        let result = match key.code {
+            KeyCode::Up | KeyCode::Char('w') => {
+                session.move_cursor(0, -1);
+                None
+            }
+            KeyCode::Down | KeyCode::Char('s') => {
+                session.move_cursor(0, 1);
+                None
+            }
+            KeyCode::Left | KeyCode::Char('a') => {
+                session.move_cursor(-1, 0);
+                None
+            }
+            KeyCode::Right | KeyCode::Char('d') => {
+                session.move_cursor(1, 0);
+                None
+            }
+            KeyCode::Enter | KeyCode::Char(' ') => session.select(),
+            KeyCode::Esc | KeyCode::Char('q') => session.finish_abandoned(),
+            _ => None,
+        };
+        if let Some(result) = result {
+            self.finish_with_result(result);
+        }
+    }
+
+    fn handle_maze_key(&mut self, key: KeyEvent) {
+        let Some(session) = self
+            .active_session
+            .as_mut()
+            .and_then(GameSession::as_maze_mut)
+        else {
+            self.screen = Screen::Ready;
+            return;
+        };
+        let movement = match key.code {
+            KeyCode::Up | KeyCode::Char('w') => Some((0, -1)),
+            KeyCode::Down | KeyCode::Char('s') => Some((0, 1)),
+            KeyCode::Left | KeyCode::Char('a') => Some((-1, 0)),
+            KeyCode::Right | KeyCode::Char('d') => Some((1, 0)),
+            KeyCode::Esc | KeyCode::Char('q') => {
+                let result = session.finish_abandoned();
+                if let Some(result) = result {
+                    self.finish_with_result(result);
+                }
+                return;
+            }
+            _ => None,
+        };
+        if let Some((dx, dy)) = movement {
+            if let Some(result) = session.move_player(dx, dy) {
+                self.finish_with_result(result);
+            }
         }
     }
 
@@ -861,63 +1073,12 @@ impl App {
                 stage.clone(),
             )
         };
-        self.session = None;
-        self.snake_session = None;
-        self.tictactoe_session = None;
-        self.game2048_session = None;
-        self.sudoku_session = None;
-        self.blackjack_session = None;
-        self.roulette_session = None;
-        self.slots_session = None;
-        self.holdem_session = None;
-        self.typing_session = None;
-        self.breakout_session = None;
-        match game_kind {
-            GameKind::Arithmetic => {
-                self.session = Some(RoundSession::new(game_id, stage_id, stage));
-            }
-            GameKind::Snake => {
-                self.snake_session = Some(SnakeSession::new(game_id, stage_id));
-            }
-            GameKind::TicTacToe => {
-                self.tictactoe_session = Some(TicTacToeSession::new(game_id, stage_id));
-            }
-            GameKind::TwentyFortyEight => {
-                self.game2048_session = Some(Game2048Session::new(game_id, stage_id));
-            }
-            GameKind::Sudoku => {
-                self.sudoku_session = Some(SudokuSession::new(game_id, stage_id));
-            }
-            GameKind::Blackjack => {
-                self.blackjack_session = Some(BlackjackSession::new(game_id, stage_id));
-            }
-            GameKind::Roulette => {
-                self.roulette_session = Some(RouletteSession::new(game_id, stage_id));
-            }
-            GameKind::Slots => {
-                self.slots_session = Some(SlotsSession::new(game_id, stage_id));
-            }
-            GameKind::Holdem => {
-                self.holdem_session = Some(HoldemSession::new(game_id, stage_id));
-            }
-            GameKind::TypingPractice => {
-                self.typing_session = Some(TypingPracticeSession::new(game_id, stage_id));
-            }
-            GameKind::Gambling => {}
-            GameKind::Breakout => {
-                self.breakout_session = Some(BreakoutSession::new(game_id, stage_id));
-            }
-        }
+        self.active_session = GameSession::start(game_id, stage_id, stage);
         self.result = None;
         self.status_message = None;
         self.gambling_feedback = None;
         if is_gambling_kind(game_kind) {
-            self.gambling_bet = 0;
-            self.gambling_bet_input.clear();
-            self.gambling_total_wager = 0;
-            self.gambling_bet_committed = false;
-            self.card_hand_betting_open = false;
-            self.card_hand_started = false;
+            self.casino.reset_round();
         }
         self.roulette_spin_until = None;
         self.roulette_spin_frame = 0;
@@ -926,12 +1087,9 @@ impl App {
 
     fn finish_with_result(&mut self, result: RoundResult) {
         let payout = self
-            .blackjack_session
+            .active_session
             .as_ref()
-            .map(BlackjackSession::payout)
-            .or_else(|| self.roulette_session.as_ref().map(RouletteSession::payout))
-            .or_else(|| self.slots_session.as_ref().map(SlotsSession::payout))
-            .or_else(|| self.holdem_session.as_ref().map(HoldemSession::payout))
+            .map(GameSession::payout_multiplier)
             .unwrap_or(0);
         if let Err(error) = self.history.add(result.clone()) {
             self.status_message = Some(format!("기록을 저장하지 못했습니다: {error}"));
@@ -948,17 +1106,7 @@ impl App {
             }
         }
         self.result = Some(result);
-        self.session = None;
-        self.snake_session = None;
-        self.tictactoe_session = None;
-        self.game2048_session = None;
-        self.sudoku_session = None;
-        self.blackjack_session = None;
-        self.roulette_session = None;
-        self.slots_session = None;
-        self.holdem_session = None;
-        self.typing_session = None;
-        self.breakout_session = None;
+        self.active_session = None;
         self.gambling_feedback = None;
         self.roulette_spin_until = None;
         self.roulette_spin_frame = 0;
@@ -987,7 +1135,7 @@ impl App {
             Some(message) => message,
             None => format!(
                 "{detail} · 총 베팅 {}원 · 배당금 +{payout}원 · Enter로 다음 판 시작",
-                self.gambling_total_wager
+                self.casino.total_wager()
             ),
         });
         self.status_message = None;
@@ -996,8 +1144,7 @@ impl App {
 
     fn start_roulette_spin(&mut self) {
         let can_spin = self
-            .roulette_session
-            .as_ref()
+            .roulette_session()
             .is_some_and(|session| session.choice().is_some());
         if can_spin && self.commit_gambling_bet() {
             self.roulette_spin_frame = 0;
@@ -1016,8 +1163,9 @@ impl App {
         self.roulette_spin_until = None;
         self.roulette_spin_frame = 0;
         let result = self
-            .roulette_session
+            .active_session
             .as_mut()
+            .and_then(GameSession::as_roulette_mut)
             .and_then(RouletteSession::spin);
         if let Some(result) = result {
             self.finish_gambling_round(result);
@@ -1025,24 +1173,21 @@ impl App {
     }
 
     fn gambling_payout(&self) -> u64 {
-        self.blackjack_session
+        self.active_session
             .as_ref()
-            .map(BlackjackSession::payout)
-            .or_else(|| self.roulette_session.as_ref().map(RouletteSession::payout))
-            .or_else(|| self.slots_session.as_ref().map(SlotsSession::payout))
-            .or_else(|| self.holdem_session.as_ref().map(HoldemSession::payout))
+            .map(GameSession::payout_multiplier)
             .unwrap_or(0)
-            .saturating_mul(self.gambling_total_wager)
+            .saturating_mul(self.casino.total_wager())
     }
 
     fn gambling_round_detail(&self) -> String {
-        if let Some(session) = self.blackjack_session.as_ref() {
+        if let Some(session) = self.blackjack_session() {
             return session
                 .outcome()
                 .map(|outcome| format!("블랙잭 결과: {}", outcome.label()))
                 .unwrap_or_else(|| "블랙잭 결과".to_string());
         }
-        if let Some(session) = self.roulette_session.as_ref() {
+        if let Some(session) = self.roulette_session() {
             return match (session.result_number(), session.result_color()) {
                 (Some(number), Some(color)) => {
                     let number = if number == 37 {
@@ -1055,7 +1200,7 @@ impl App {
                 _ => "룰렛 결과".to_string(),
             };
         }
-        if let Some(session) = self.slots_session.as_ref() {
+        if let Some(session) = self.slots_session() {
             let symbols = session.symbols();
             return format!(
                 "슬롯 결과: {} {} {}",
@@ -1064,7 +1209,7 @@ impl App {
                 symbols[2].label()
             );
         }
-        if let Some(session) = self.holdem_session.as_ref() {
+        if let Some(session) = self.holdem_session() {
             return session
                 .outcome()
                 .map(|outcome| {
@@ -1097,41 +1242,15 @@ impl App {
             return;
         }
         self.clear_sessions();
-        self.gambling_bet = 0;
-        self.gambling_bet_input.clear();
-        self.gambling_total_wager = 0;
-        self.gambling_bet_committed = false;
-        self.card_hand_betting_open = false;
-        self.card_hand_started = false;
-        match game_kind {
-            GameKind::Blackjack => {
-                self.blackjack_session = Some(BlackjackSession::new(game_id, stage_id));
-            }
-            GameKind::Roulette => {
-                self.roulette_session = Some(RouletteSession::new(game_id, stage_id));
-            }
-            GameKind::Slots => {
-                self.slots_session = Some(SlotsSession::new(game_id, stage_id));
-            }
-            GameKind::Holdem => {
-                self.holdem_session = Some(HoldemSession::new(game_id, stage_id));
-            }
-            _ => {}
-        }
+        self.casino.reset_round();
+        self.active_session = GameSession::restart_casino(game_kind, game_id, stage_id);
     }
 
     fn exit_gambling(&mut self) {
-        let result = if let Some(session) = self.blackjack_session.as_mut() {
-            session.finish_abandoned()
-        } else if let Some(session) = self.roulette_session.as_mut() {
-            session.finish_abandoned()
-        } else if let Some(session) = self.slots_session.as_mut() {
-            session.finish_abandoned()
-        } else if let Some(session) = self.holdem_session.as_mut() {
-            session.finish_abandoned()
-        } else {
-            None
-        };
+        let result = self
+            .active_session
+            .as_mut()
+            .and_then(GameSession::finish_abandoned);
         if let Some(result) = result {
             if let Err(error) = self.history.add(result.clone()) {
                 self.status_message = Some(format!("기록을 저장하지 못했습니다: {error}"));
@@ -1142,51 +1261,36 @@ impl App {
         self.clear_sessions();
         self.gambling_feedback = None;
         self.result = None;
-        self.gambling_bet = 0;
-        self.gambling_bet_input.clear();
-        self.gambling_total_wager = 0;
-        self.gambling_bet_committed = false;
-        self.card_hand_betting_open = false;
-        self.card_hand_started = false;
+        self.casino.reset_round();
         self.screen = Screen::StageSelect;
     }
 
     fn clear_sessions(&mut self) {
-        self.session = None;
-        self.snake_session = None;
-        self.tictactoe_session = None;
-        self.game2048_session = None;
-        self.sudoku_session = None;
-        self.blackjack_session = None;
-        self.roulette_session = None;
-        self.slots_session = None;
-        self.holdem_session = None;
-        self.typing_session = None;
-        self.breakout_session = None;
+        self.active_session = None;
         self.roulette_spin_until = None;
         self.roulette_spin_frame = 0;
     }
 
     fn commit_gambling_bet(&mut self) -> bool {
-        if self.gambling_bet_committed {
+        if self.casino.bet_committed() {
             return true;
         }
-        if self.gambling_bet == 0 {
+        let bet = self.casino.bet();
+        if bet == 0 {
             self.status_message = Some("테이블에서 베팅 금액을 먼저 입력해 주세요.".to_string());
             return false;
         }
-        if !self.spend_won(self.gambling_bet) {
+        if !self.spend_won(bet) {
             return false;
         }
-        self.gambling_total_wager = self.gambling_bet;
-        self.gambling_bet_committed = true;
+        self.casino.commit_initial_wager();
         true
     }
 
     fn add_holdem_wager(&mut self, amount: u32) -> bool {
         let amount = u64::from(amount);
         if amount == 0 || self.spend_won(amount) {
-            self.gambling_total_wager = self.gambling_total_wager.saturating_add(amount);
+            self.casino.add_wager(amount);
             true
         } else {
             false
@@ -1251,43 +1355,6 @@ fn is_gambling_kind(kind: GameKind) -> bool {
     )
 }
 
-pub fn run_tui(
-    catalog: GameCatalog,
-    route: CliRoute,
-    history: Box<dyn HistoryStore>,
-) -> io::Result<()> {
-    enable_raw_mode()?;
-    let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, Hide)?;
-    let mut renderer = ui::Renderer::new();
-    let result = run_event_loop(
-        &mut stdout,
-        &mut renderer,
-        App::new(catalog, route, history),
-    );
-
-    disable_raw_mode()?;
-    execute!(stdout, ResetColor, Show, LeaveAlternateScreen)?;
-    result
-}
-
-fn run_event_loop(
-    output: &mut io::Stdout,
-    renderer: &mut ui::Renderer,
-    mut app: App,
-) -> io::Result<()> {
-    while !app.should_quit {
-        renderer.draw(output, &app)?;
-        if event::poll(Duration::from_millis(100))?
-            && let Event::Key(key) = event::read()?
-        {
-            app.handle_key(key);
-        }
-        app.on_tick();
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use crossterm::event::{KeyEvent, KeyModifiers};
@@ -1314,7 +1381,7 @@ mod tests {
         app.handle_key(key(KeyCode::Enter));
         assert_eq!(app.screen(), Screen::StageSelect);
         app.handle_key(key(KeyCode::Down));
-        assert_eq!(app.selected_stage, 1);
+        assert_eq!(app.selected_stage_index(), 1);
         app.handle_key(key(KeyCode::Enter));
         assert_eq!(app.screen(), Screen::Ready);
         app.handle_key(key(KeyCode::Enter));
@@ -1345,7 +1412,7 @@ mod tests {
         app.handle_key(key(KeyCode::Enter));
         assert_eq!(app.wallet_won(), 0);
         assert!(app.roulette_is_spinning());
-        assert!(app.roulette_session.is_some());
+        assert!(app.roulette_session().is_some());
     }
 
     #[test]
@@ -1357,13 +1424,13 @@ mod tests {
         app.handle_key(key(KeyCode::Esc));
         assert_eq!(app.screen(), Screen::Result);
         assert_eq!(
-            app.result.as_ref().expect("result").status,
+            app.result().expect("result").status,
             crate::round::RoundStatus::Abandoned
         );
 
         let mut app = make_app();
         app.handle_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL));
-        assert!(app.should_quit);
+        assert!(app.should_quit());
     }
 
     #[test]
@@ -1378,19 +1445,16 @@ mod tests {
         );
         app.handle_key(key(KeyCode::Enter));
         assert_eq!(app.screen(), Screen::Playing);
-        assert!(app.snake_session.is_some());
+        assert!(app.snake_session().is_some());
         app.handle_key(key(KeyCode::Up));
         assert_eq!(
-            app.snake_session
-                .as_ref()
-                .expect("snake session")
-                .direction(),
+            app.snake_session().expect("snake session").direction(),
             Direction::Up
         );
         app.handle_key(key(KeyCode::Esc));
         assert_eq!(app.screen(), Screen::Result);
         assert_eq!(
-            app.result.as_ref().expect("snake result").game_id,
+            app.result().expect("snake result").game_id,
             GameId::new("snake")
         );
     }
@@ -1406,7 +1470,7 @@ mod tests {
             Box::new(MemoryHistoryStore::default()),
         );
         app.handle_key(key(KeyCode::Enter));
-        assert!(app.tictactoe_session.is_some());
+        assert!(app.tictactoe_session().is_some());
         app.handle_key(key(KeyCode::Esc));
         assert_eq!(app.screen(), Screen::Result);
 
@@ -1419,7 +1483,7 @@ mod tests {
             Box::new(MemoryHistoryStore::default()),
         );
         app.handle_key(key(KeyCode::Enter));
-        assert!(app.game2048_session.is_some());
+        assert!(app.game2048_session().is_some());
         app.handle_key(key(KeyCode::Left));
         app.handle_key(key(KeyCode::Esc));
         assert_eq!(app.screen(), Screen::Result);
@@ -1433,7 +1497,7 @@ mod tests {
             Box::new(MemoryHistoryStore::default()),
         );
         app.handle_key(key(KeyCode::Enter));
-        assert!(app.sudoku_session.is_some());
+        assert!(app.sudoku_session().is_some());
         app.handle_key(key(KeyCode::Right));
         app.handle_key(key(KeyCode::Char('1')));
         app.handle_key(key(KeyCode::Esc));
@@ -1452,7 +1516,7 @@ mod tests {
             }),
         );
         app.handle_key(key(KeyCode::Enter));
-        assert!(app.blackjack_session.is_some());
+        assert!(app.blackjack_session().is_some());
         assert!(!app.card_hand_started());
         assert_eq!(app.wallet_won(), 1);
         app.handle_key(key(KeyCode::Enter));
@@ -1477,14 +1541,11 @@ mod tests {
             }),
         );
         app.handle_key(key(KeyCode::Enter));
-        assert!(app.roulette_session.is_some());
+        assert!(app.roulette_session().is_some());
         app.handle_key(key(KeyCode::Char('1')));
         app.handle_key(key(KeyCode::Char('r')));
         assert_eq!(
-            app.roulette_session
-                .as_ref()
-                .expect("roulette session")
-                .choice(),
+            app.roulette_session().expect("roulette session").choice(),
             Some(RouletteColor::Red)
         );
         app.handle_key(key(KeyCode::Enter));
@@ -1492,7 +1553,7 @@ mod tests {
         assert!(app.roulette_is_spinning());
         app.roulette_spin_until = Some(Instant::now() - Duration::from_secs(1));
         app.on_tick();
-        assert!(app.gambling_feedback.is_some());
+        assert!(app.gambling_feedback().is_some());
         app.handle_key(key(KeyCode::Esc));
         assert_eq!(app.screen(), Screen::StageSelect);
 
@@ -1515,13 +1576,12 @@ mod tests {
         assert!(app.roulette_is_spinning());
         app.roulette_spin_until = Some(Instant::now() - Duration::from_secs(1));
         app.on_tick();
-        assert!(app.gambling_feedback.is_some());
+        assert!(app.gambling_feedback().is_some());
         let wallet_after_result = app.wallet_won();
         app.handle_key(key(KeyCode::Enter));
-        assert!(app.gambling_feedback.is_none());
+        assert!(app.gambling_feedback().is_none());
         assert!(
-            app.roulette_session
-                .as_ref()
+            app.roulette_session()
                 .expect("next roulette session")
                 .result_color()
                 .is_none()
@@ -1541,14 +1601,14 @@ mod tests {
             }),
         );
         app.handle_key(key(KeyCode::Enter));
-        assert!(app.holdem_session.is_some());
+        assert!(app.holdem_session().is_some());
         assert!(!app.card_hand_started());
         app.handle_key(key(KeyCode::Enter));
         app.handle_key(key(KeyCode::Char('1')));
         app.handle_key(key(KeyCode::Enter));
         assert!(app.card_hand_started());
         app.handle_key(key(KeyCode::Char('c')));
-        assert!(app.holdem_session.is_some());
+        assert!(app.holdem_session().is_some());
         app.handle_key(key(KeyCode::Esc));
         assert_eq!(app.screen(), Screen::StageSelect);
 
@@ -1562,8 +1622,7 @@ mod tests {
         );
         let sentence = {
             app.handle_key(key(KeyCode::Enter));
-            app.typing_session
-                .as_ref()
+            app.typing_session()
                 .expect("typing session")
                 .sentence()
                 .to_string()
@@ -1586,7 +1645,7 @@ mod tests {
         );
         app.handle_key(key(KeyCode::Char('1')));
         app.handle_key(key(KeyCode::Enter));
-        assert!(app.breakout_session.is_some());
+        assert!(app.breakout_session().is_some());
         app.handle_key(key(KeyCode::Left));
         app.handle_key(key(KeyCode::Esc));
         assert_eq!(app.screen(), Screen::Result);

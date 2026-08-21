@@ -491,11 +491,13 @@ fn evaluate_five(cards: [Card; 5]) -> HandValue {
     } else {
         None
     };
-    if flush && let Some(high) = straight_high {
-        return HandValue {
-            category: 8,
-            tiebreak: [high, 0, 0, 0, 0],
-        };
+    if flush {
+        if let Some(high) = straight_high {
+            return HandValue {
+                category: 8,
+                tiebreak: [high, 0, 0, 0, 0],
+            };
+        }
     }
     if let Some(quad) = (2u8..=14)
         .rev()
@@ -513,14 +515,16 @@ fn evaluate_five(cards: [Card; 5]) -> HandValue {
     if let Some(triple) = (2u8..=14)
         .rev()
         .find(|rank| counts[usize::from(*rank)] == 3)
-        && let Some(pair) = (2u8..=14)
+    {
+        if let Some(pair) = (2u8..=14)
             .rev()
             .find(|rank| *rank != triple && counts[usize::from(*rank)] >= 2)
-    {
-        return HandValue {
-            category: 6,
-            tiebreak: [triple, pair, 0, 0, 0],
-        };
+        {
+            return HandValue {
+                category: 6,
+                tiebreak: [triple, pair, 0, 0, 0],
+            };
+        }
     }
     if flush {
         distinct.resize(5, 0);

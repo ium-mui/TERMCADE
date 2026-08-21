@@ -13,9 +13,14 @@ use crate::blackjack::{Card, Suit};
 use crate::breakout::{
     BOARD_HEIGHT as BREAKOUT_BOARD_HEIGHT, BOARD_WIDTH as BREAKOUT_BOARD_WIDTH, PADDLE_WIDTH,
 };
+use crate::connect_four::{
+    CONNECT_FOUR_HEIGHT, CONNECT_FOUR_WIDTH, ConnectFourCell, ConnectFourOutcome,
+};
 use crate::domain::{GameDefinition, GameKind, StageDefinition};
 use crate::game_2048::{GRID_SIZE, Game2048Session};
 use crate::holdem::HoldemAiAction;
+use crate::memory_match::MemoryCardState;
+use crate::minesweeper::{CellState as MineCellState, MinesweeperOutcome};
 use crate::roulette::{RouletteColor, WHEEL_NUMBERS};
 use crate::round::{RoundSession, RoundStatus};
 use crate::snake::{BOARD_HEIGHT, BOARD_WIDTH, Direction, Point};
@@ -108,6 +113,9 @@ const PINK: Color = Color::Rgb {
     g: 125,
     b: 180,
 };
+
+pub const MIN_TERMINAL_WIDTH: u16 = 64;
+pub const MIN_TERMINAL_HEIGHT: u16 = 24;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct Paint {
@@ -294,14 +302,25 @@ impl Renderer {
 
     pub fn draw(&mut self, output: &mut impl Write, app: &App) -> io::Result<()> {
         let (width, height) = terminal::size()?;
+        self.draw_at(output, app, width, height)
+    }
+
+    /// Renders at a fixed size for automated tests and non-interactive hosts.
+    pub fn draw_at(
+        &mut self,
+        output: &mut impl Write,
+        app: &App,
+        width: u16,
+        height: u16,
+    ) -> io::Result<()> {
         let mut buffer = Buffer::new(width, height);
         let area = Rect::new(0, 0, width, height);
-        if width < 64 || height < 24 {
+        if width < MIN_TERMINAL_WIDTH || height < MIN_TERMINAL_HEIGHT {
             draw_small(&mut buffer, area);
         } else {
             draw_header(&mut buffer, app, area);
             let body = Rect::new(0, 2, width, height.saturating_sub(4));
-            match app.screen {
+            match app.screen() {
                 Screen::GameSelect => draw_game_select(&mut buffer, app, body),
                 Screen::StageSelect => draw_stage_select(&mut buffer, app, body),
                 Screen::Ready => draw_ready(&mut buffer, app, body),
@@ -382,7 +401,7 @@ fn draw_small(buffer: &mut Buffer, area: Rect) {
     buffer.centered_text(
         inner,
         inner.y.saturating_add(4),
-        "권장 크기  64 × 20 이상",
+        "권장 크기  64 × 24 이상",
         Paint::new(MUTED, PANEL, false),
     );
 }
@@ -392,7 +411,7 @@ fn draw_header(buffer: &mut Buffer, app: &App, area: Rect) {
     buffer.fill(header, Paint::new(TEXT, HEADER_BG, false));
     buffer.line(0, 1, area.width, '─', Paint::new(BORDER, HEADER_BG, false));
     buffer.text(1, 0, "◈ ARCADE", Paint::new(TEXT, HEADER_BG, true));
-    let title = match app.screen {
+    let title = match app.screen() {
         Screen::GameSelect => "ARCADE FLOOR",
         Screen::StageSelect => "CABINET / MODE SELECT",
         Screen::Ready => "INSERT COIN",
@@ -418,43 +437,53 @@ fn draw_header(buffer: &mut Buffer, app: &App, area: Rect) {
 fn draw_footer(buffer: &mut Buffer, app: &App, area: Rect) {
     let y = area.height.saturating_sub(2);
     buffer.line(0, y, area.width, '─', Paint::new(BORDER, BG, false));
-    let help = match app.screen {
+    let help = match app.screen() {
         Screen::GameSelect => "↑↓ SELECT CABINET   ENTER INSERT COIN   ESC EXIT",
         Screen::StageSelect => "↑↓ SELECT MODE   ENTER READY   ESC BACK",
         Screen::Ready => "ENTER OPEN TABLE / START GAME   ESC BACK   Ctrl+C EXIT",
-        Screen::Playing if app.gambling_feedback.is_some() => {
+        Screen::Playing if app.gambling_feedback().is_some() => {
             "ENTER NEXT HAND   ESC EXIT CABINET   Ctrl+C QUIT"
         }
-        Screen::Playing if app.snake_session.is_some() => {
+        Screen::Playing if app.snake_session().is_some() => {
             "ARROWS/WASD MOVE   ESC EXIT CABINET   Ctrl+C QUIT"
         }
-        Screen::Playing if app.tictactoe_session.is_some() => {
+        Screen::Playing if app.tictactoe_session().is_some() => {
             "ARROWS SELECT   ENTER PLACE   ESC EXIT   Ctrl+C QUIT"
         }
-        Screen::Playing if app.game2048_session.is_some() => {
+        Screen::Playing if app.game2048_session().is_some() => {
             "ARROWS/WASD MOVE   ESC EXIT   Ctrl+C QUIT"
         }
-        Screen::Playing if app.sudoku_session.is_some() => {
+        Screen::Playing if app.sudoku_session().is_some() => {
             "ARROWS MOVE   NUMBER INPUT   BACKSPACE CLEAR   ESC EXIT"
         }
-        Screen::Playing if app.blackjack_session.is_some() => {
+        Screen::Playing if app.blackjack_session().is_some() => {
             "TYPE BET   ENTER/H HIT   S/SPACE STAND   ESC EXIT   Ctrl+C QUIT"
         }
-        Screen::Playing if app.roulette_session.is_some() => {
+        Screen::Playing if app.roulette_session().is_some() => {
             "TYPE BET   R RED   B BLACK   G GREEN   ENTER SPIN   ESC EXIT"
         }
-        Screen::Playing if app.slots_session.is_some() => {
+        Screen::Playing if app.slots_session().is_some() => {
             "TYPE BET   ENTER/SPACE PULL   ESC EXIT   Ctrl+C QUIT"
         }
-        Screen::Playing if app.holdem_session.is_some() => {
+        Screen::Playing if app.holdem_session().is_some() => {
             "TYPE BET   C CHECK   R +10   T +25   Y +50   F FOLD   ESC EXIT"
         }
-        Screen::Playing if app.typing_session.is_some() => {
+        Screen::Playing if app.typing_session().is_some() => {
             "TYPE   ENTER SUBMIT   BACKSPACE EDIT   ESC EXIT"
         }
-        Screen::Playing if app.breakout_session.is_some() => {
+        Screen::Playing if app.breakout_session().is_some() => {
             "ARROWS/A-D MOVE PADDLE   ESC EXIT   Ctrl+C QUIT"
         }
+        Screen::Playing if app.minesweeper_session().is_some() => {
+            "ARROWS/WASD MOVE   ENTER REVEAL   F FLAG   ESC EXIT"
+        }
+        Screen::Playing if app.connect_four_session().is_some() => {
+            "LEFT/RIGHT SELECT   ENTER DROP   ESC EXIT"
+        }
+        Screen::Playing if app.memory_match_session().is_some() => {
+            "ARROWS/WASD SELECT   ENTER FLIP/CONTINUE   ESC EXIT"
+        }
+        Screen::Playing if app.maze_session().is_some() => "ARROWS/WASD EXPLORE   ESC EXIT",
         Screen::Playing => "NUMBER INPUT   BACKSPACE EDIT   ENTER SUBMIT   ESC EXIT",
         Screen::Result => "ENTER/ESC ARCADE FLOOR   Q EXIT",
     };
@@ -504,12 +533,18 @@ fn draw_game_select(buffer: &mut Buffer, app: &App, area: Rect) {
 
 fn draw_cabinet_list(buffer: &mut Buffer, app: &App, rect: Rect) {
     buffer.panel(rect, " CABINET ROW ", BORDER, PANEL);
-    for (index, game) in app.catalog.games().iter().enumerate() {
-        let y = rect.y.saturating_add(2 + index as u16);
-        if y >= rect.y.saturating_add(rect.height).saturating_sub(1) {
-            break;
-        }
-        let selected = index == app.selected_game;
+    let games = app.catalog().games();
+    let visible_rows = usize::from(rect.height.saturating_sub(3)).max(1);
+    let start = cabinet_window_start(app.selected_game_index(), games.len(), visible_rows);
+    for (row_index, (index, game)) in games
+        .iter()
+        .enumerate()
+        .skip(start)
+        .take(visible_rows)
+        .enumerate()
+    {
+        let y = rect.y.saturating_add(2 + row_index as u16);
+        let selected = index == app.selected_game_index();
         let row = Rect::new(rect.x.saturating_add(1), y, rect.width.saturating_sub(2), 1);
         if selected {
             buffer.fill(row, Paint::new(TEXT, PANEL_HOVER, true));
@@ -545,6 +580,29 @@ fn draw_cabinet_list(buffer: &mut Buffer, app: &App, rect: Rect) {
             Paint::new(game_color(game.kind), background, true),
         );
     }
+    if start > 0 {
+        buffer.text(
+            rect.x.saturating_add(rect.width.saturating_sub(3)),
+            rect.y.saturating_add(1),
+            "▲",
+            Paint::new(CYAN, PANEL, true),
+        );
+    }
+    if start + visible_rows < games.len() {
+        buffer.text(
+            rect.x.saturating_add(rect.width.saturating_sub(3)),
+            rect.y.saturating_add(rect.height.saturating_sub(1)),
+            "▼",
+            Paint::new(CYAN, PANEL, true),
+        );
+    }
+}
+
+fn cabinet_window_start(selected: usize, total: usize, visible: usize) -> usize {
+    let visible = visible.max(1);
+    selected
+        .saturating_sub(visible / 2)
+        .min(total.saturating_sub(visible))
 }
 
 fn draw_game_preview(buffer: &mut Buffer, app: &App, rect: Rect) {
@@ -649,7 +707,7 @@ fn draw_stage_list(buffer: &mut Buffer, app: &App, game: &GameDefinition, rect: 
         if y.saturating_add(1) >= rect.y.saturating_add(rect.height).saturating_sub(1) {
             break;
         }
-        let selected = index == app.selected_stage;
+        let selected = index == app.selected_stage_index();
         let background = if selected { PANEL_HOVER } else { PANEL };
         if selected {
             buffer.fill(
@@ -796,7 +854,7 @@ fn draw_ready(buffer: &mut Buffer, app: &App, area: Rect) {
             "ENTER OPEN TABLE   ·   SET WAGER AFTER ENTRY",
             Paint::new(BG, CYAN, true),
         );
-        if let Some(message) = app.status_message.as_deref() {
+        if let Some(message) = app.status_message() {
             buffer.centered_text(
                 inner,
                 inner.y.saturating_add(12),
@@ -825,33 +883,41 @@ fn draw_ready(buffer: &mut Buffer, app: &App, area: Rect) {
 }
 
 fn draw_playing(buffer: &mut Buffer, app: &App, area: Rect) {
-    if app.snake_session.is_some() {
+    if app.snake_session().is_some() {
         draw_snake(buffer, app, area);
-    } else if app.tictactoe_session.is_some() {
+    } else if app.tictactoe_session().is_some() {
         draw_tictactoe(buffer, app, area);
-    } else if app.game2048_session.is_some() {
+    } else if app.game2048_session().is_some() {
         draw_2048(buffer, app, area);
-    } else if app.sudoku_session.is_some() {
+    } else if app.sudoku_session().is_some() {
         draw_sudoku(buffer, app, area);
-    } else if app.blackjack_session.is_some() {
+    } else if app.blackjack_session().is_some() {
         draw_blackjack(buffer, app, area);
-    } else if app.roulette_session.is_some() {
+    } else if app.roulette_session().is_some() {
         draw_roulette(buffer, app, area);
-    } else if app.slots_session.is_some() {
+    } else if app.slots_session().is_some() {
         draw_slots(buffer, app, area);
-    } else if app.holdem_session.is_some() {
+    } else if app.holdem_session().is_some() {
         draw_holdem(buffer, app, area);
-    } else if app.typing_session.is_some() {
+    } else if app.typing_session().is_some() {
         draw_typing(buffer, app, area);
-    } else if app.breakout_session.is_some() {
+    } else if app.breakout_session().is_some() {
         draw_breakout(buffer, app, area);
+    } else if app.minesweeper_session().is_some() {
+        draw_minesweeper(buffer, app, area);
+    } else if app.connect_four_session().is_some() {
+        draw_connect_four(buffer, app, area);
+    } else if app.memory_match_session().is_some() {
+        draw_memory_match(buffer, app, area);
+    } else if app.maze_session().is_some() {
+        draw_maze(buffer, app, area);
     } else {
         draw_math(buffer, app, area);
     }
 }
 
 fn draw_math(buffer: &mut Buffer, app: &App, area: Rect) {
-    let Some(session) = app.session.as_ref() else {
+    let Some(session) = app.round_session() else {
         return;
     };
     let panel = centered(
@@ -921,7 +987,7 @@ fn draw_math_board(buffer: &mut Buffer, session: &RoundSession, app: &App, rect:
             true,
         ),
     );
-    if let Some(message) = app.status_message.as_deref() {
+    if let Some(message) = app.status_message() {
         buffer.centered_text(
             inner,
             inner.y.saturating_add(11),
@@ -971,7 +1037,7 @@ fn draw_math_hud(buffer: &mut Buffer, session: &RoundSession, rect: Rect) {
 }
 
 fn draw_snake(buffer: &mut Buffer, app: &App, area: Rect) {
-    let Some(session) = app.snake_session.as_ref() else {
+    let Some(session) = app.snake_session() else {
         return;
     };
     let panel = centered(
@@ -1031,6 +1097,7 @@ fn draw_snake(buffer: &mut Buffer, app: &App, area: Rect) {
         hud,
         " HUD ",
         &[
+            ("PACE", session.pace().label().to_string(), CYAN),
             ("SCORE", session.score().to_string(), YELLOW),
             ("LENGTH", session.snake().len().to_string(), GREEN),
             ("FOOD", "✦".to_string(), RED),
@@ -1040,7 +1107,7 @@ fn draw_snake(buffer: &mut Buffer, app: &App, area: Rect) {
 }
 
 fn draw_2048(buffer: &mut Buffer, app: &App, area: Rect) {
-    let Some(session) = app.game2048_session.as_ref() else {
+    let Some(session) = app.game2048_session() else {
         return;
     };
     let panel = centered(area, area.width.saturating_sub(2), area.height);
@@ -1064,7 +1131,7 @@ fn draw_2048(buffer: &mut Buffer, app: &App, area: Rect) {
         for (column_index, tile) in row.iter().enumerate() {
             let x = cells.x + column_index as u16 * (tile_width + 1);
             let y = cells.y + row_index as u16 * (tile_height + 1);
-            let shimmer = (frame + row_index * GRID_SIZE + column_index).is_multiple_of(13);
+            let shimmer = (frame + row_index * GRID_SIZE + column_index) % 13 == 0;
             draw_2048_tile(
                 buffer,
                 Rect::new(x, y, tile_width, tile_height),
@@ -1156,7 +1223,7 @@ fn draw_2048_status(buffer: &mut Buffer, app: &App, session: &Game2048Session, r
 }
 
 fn draw_sudoku(buffer: &mut Buffer, app: &App, area: Rect) {
-    let Some(session) = app.sudoku_session.as_ref() else {
+    let Some(session) = app.sudoku_session() else {
         return;
     };
     let panel = centered(
@@ -1221,16 +1288,16 @@ fn draw_sudoku(buffer: &mut Buffer, app: &App, area: Rect) {
         hud,
         " HUD ",
         &[
+            ("MODE", session.difficulty().label().to_string(), PURPLE),
             ("FILLED", format!("{}/81", session.filled_count()), CYAN),
             ("MISTAKES", session.mistakes().to_string(), RED),
-            ("STREAK", session.current_streak().to_string(), YELLOW),
         ],
         "ARROWS MOVE  1-9 FILL",
     );
 }
 
 fn draw_tictactoe(buffer: &mut Buffer, app: &App, area: Rect) {
-    let Some(session) = app.tictactoe_session.as_ref() else {
+    let Some(session) = app.tictactoe_session() else {
         return;
     };
     let panel = centered(
@@ -1285,14 +1352,12 @@ fn draw_tictactoe(buffer: &mut Buffer, app: &App, area: Rect) {
             ("YOU", "X".to_string(), CYAN),
             ("CPU", "O".to_string(), YELLOW),
         ],
-        app.status_message
-            .as_deref()
-            .unwrap_or("ARROWS SELECT  ENTER PLACE"),
+        app.status_message().unwrap_or("ARROWS SELECT  ENTER PLACE"),
     );
 }
 
 fn draw_blackjack(buffer: &mut Buffer, app: &App, area: Rect) {
-    let Some(session) = app.blackjack_session.as_ref() else {
+    let Some(session) = app.blackjack_session() else {
         return;
     };
     let panel = centered(
@@ -1373,7 +1438,7 @@ fn draw_blackjack(buffer: &mut Buffer, app: &App, area: Rect) {
         Paint::new(TEXT, Color::Rgb { r: 8, g: 53, b: 45 }, true),
     );
     let feedback = gambling_feedback_line(app)
-        .or_else(|| app.status_message.clone())
+        .or_else(|| app.status_message().map(str::to_string))
         .unwrap_or_else(|| {
             if !app.card_hand_betting_open() {
                 "ENTER START HAND   ·   ESC LEAVE TABLE".to_string()
@@ -1396,7 +1461,7 @@ fn draw_blackjack(buffer: &mut Buffer, app: &App, area: Rect) {
 }
 
 fn draw_holdem(buffer: &mut Buffer, app: &App, area: Rect) {
-    let Some(session) = app.holdem_session.as_ref() else {
+    let Some(session) = app.holdem_session() else {
         return;
     };
     let felt = Color::Rgb { r: 7, g: 68, b: 51 };
@@ -1481,7 +1546,7 @@ fn draw_holdem(buffer: &mut Buffer, app: &App, area: Rect) {
             session.difficulty().label(),
             session.payout().saturating_mul(app.gambling_total_wager())
         )
-    } else if let Some(message) = app.status_message.as_deref() {
+    } else if let Some(message) = app.status_message() {
         message.to_string()
     } else if !app.card_hand_betting_open() {
         "ENTER START HAND   ·   ESC LEAVE TABLE".to_string()
@@ -1624,7 +1689,7 @@ fn draw_card_backs(buffer: &mut Buffer, x: u16, y: u16, count: usize) {
 }
 
 fn draw_roulette(buffer: &mut Buffer, app: &App, area: Rect) {
-    let Some(session) = app.roulette_session.as_ref() else {
+    let Some(session) = app.roulette_session() else {
         return;
     };
     let panel = centered(
@@ -1778,8 +1843,7 @@ fn draw_roulette(buffer: &mut Buffer, app: &App, area: Rect) {
         ),
     );
     let roulette_controls = app
-        .status_message
-        .as_deref()
+        .status_message()
         .unwrap_or("TYPE AMOUNT   R RED   B BLACK   G GREEN   ·   ENTER SPIN");
     buffer.text(
         inner.x,
@@ -1823,7 +1887,7 @@ fn draw_roulette(buffer: &mut Buffer, app: &App, area: Rect) {
 }
 
 fn draw_slots(buffer: &mut Buffer, app: &App, area: Rect) {
-    let Some(session) = app.slots_session.as_ref() else {
+    let Some(session) = app.slots_session() else {
         return;
     };
     let panel = centered(
@@ -1946,7 +2010,7 @@ fn draw_slots(buffer: &mut Buffer, app: &App, area: Rect) {
             gambling_wager_label(app),
             session.payout().saturating_mul(app.gambling_total_wager())
         )
-    } else if let Some(message) = app.status_message.as_deref() {
+    } else if let Some(message) = app.status_message() {
         message.to_string()
     } else if app.gambling_bet_committed() {
         format!(
@@ -1973,7 +2037,7 @@ fn draw_slots(buffer: &mut Buffer, app: &App, area: Rect) {
 }
 
 fn draw_typing(buffer: &mut Buffer, app: &App, area: Rect) {
-    let Some(session) = app.typing_session.as_ref() else {
+    let Some(session) = app.typing_session() else {
         return;
     };
     let panel = centered(
@@ -2046,7 +2110,7 @@ fn draw_typing(buffer: &mut Buffer, app: &App, area: Rect) {
 }
 
 fn draw_breakout(buffer: &mut Buffer, app: &App, area: Rect) {
-    let Some(session) = app.breakout_session.as_ref() else {
+    let Some(session) = app.breakout_session() else {
         return;
     };
     let panel = centered(
@@ -2107,11 +2171,428 @@ fn draw_breakout(buffer: &mut Buffer, app: &App, area: Rect) {
     );
 }
 
-fn draw_result(buffer: &mut Buffer, app: &App, area: Rect) {
-    let Some(result) = app.result.as_ref() else {
+fn draw_minesweeper(buffer: &mut Buffer, app: &App, area: Rect) {
+    let Some(session) = app.minesweeper_session() else {
         return;
     };
-    let kind = app.catalog.find_game(&result.game_id).and_then(|game| {
+    let panel = centered(area, area.width.saturating_sub(2), area.height);
+    buffer.panel(panel, " MINESWEEPER // SAFE FIELD ", CYAN, SURFACE);
+    let inner = panel.inset(1);
+    let board_width = session.width() as u16;
+    let cell_width = if inner.width >= board_width.saturating_mul(2).saturating_add(20) {
+        2
+    } else {
+        1
+    };
+    let board = Rect::new(
+        inner.x,
+        inner.y,
+        board_width.saturating_mul(cell_width).saturating_add(2),
+        session.height() as u16 + 2,
+    );
+    buffer.panel(board, " MINE GRID ", BORDER_BRIGHT, PANEL);
+    for y in 0..session.height() {
+        for x in 0..session.width() {
+            let index = y * session.width() + x;
+            let cell = session.cell(x, y).expect("cell inside board");
+            let selected = index == session.cursor() && !session.is_game_over();
+            let rect = Rect::new(
+                board.x + 1 + x as u16 * cell_width,
+                board.y + 1 + y as u16,
+                cell_width,
+                1,
+            );
+            let (glyph, foreground, background) = if session.is_game_over() && cell.is_mine {
+                ("✹", BG, if selected { YELLOW } else { RED })
+            } else {
+                match cell.state {
+                    MineCellState::Hidden => (
+                        if cell_width == 2 { "▒▒" } else { "▒" },
+                        if selected { BG } else { BORDER_BRIGHT },
+                        if selected { CYAN } else { PANEL_ALT },
+                    ),
+                    MineCellState::Flagged => (
+                        "⚑",
+                        if selected { BG } else { YELLOW },
+                        if selected { CYAN } else { PANEL_ALT },
+                    ),
+                    MineCellState::Revealed if cell.is_mine => ("✹", BG, RED),
+                    MineCellState::Revealed if cell.adjacent_mines == 0 => {
+                        ("·", GRID, if selected { PANEL_HOVER } else { SURFACE })
+                    }
+                    MineCellState::Revealed => (
+                        mine_number(cell.adjacent_mines),
+                        mine_number_color(cell.adjacent_mines),
+                        if selected { PANEL_HOVER } else { SURFACE },
+                    ),
+                }
+            };
+            buffer.fill(rect, Paint::new(foreground, background, true));
+            let glyph_x = rect.x + rect.width.saturating_sub(glyph.width() as u16) / 2;
+            buffer.text(
+                glyph_x,
+                rect.y,
+                glyph,
+                Paint::new(foreground, background, true),
+            );
+        }
+    }
+    let hud = Rect::new(
+        board.x + board.width + 1,
+        inner.y,
+        inner.width.saturating_sub(board.width + 1),
+        board.height.min(inner.height),
+    );
+    let remaining = session.mine_count().saturating_sub(session.flags());
+    let status = match session.outcome() {
+        Some(MinesweeperOutcome::Cleared) => "FIELD CLEAR",
+        Some(MinesweeperOutcome::Exploded) => "MINE HIT",
+        None => "SCANNING",
+    };
+    draw_simple_hud(
+        buffer,
+        hud,
+        " FIELD DATA ",
+        &[
+            ("MODE", session.difficulty().label().to_string(), CYAN),
+            (
+                "STATUS",
+                status.to_string(),
+                if session.is_game_over() { RED } else { GREEN },
+            ),
+            ("MINES", remaining.to_string(), YELLOW),
+            (
+                "SAFE",
+                format!(
+                    "{} / {}",
+                    session.revealed_safe(),
+                    session.width() * session.height() - session.mine_count()
+                ),
+                BLUE,
+            ),
+        ],
+        "ENTER REVEAL · F FLAG",
+    );
+}
+
+fn mine_number(value: u8) -> &'static str {
+    match value {
+        1 => "1",
+        2 => "2",
+        3 => "3",
+        4 => "4",
+        5 => "5",
+        6 => "6",
+        7 => "7",
+        _ => "8",
+    }
+}
+
+fn mine_number_color(value: u8) -> Color {
+    match value {
+        1 => BLUE,
+        2 => GREEN,
+        3 => RED,
+        4 => PURPLE,
+        5 => PINK,
+        _ => YELLOW,
+    }
+}
+
+fn draw_connect_four(buffer: &mut Buffer, app: &App, area: Rect) {
+    let Some(session) = app.connect_four_session() else {
+        return;
+    };
+    let panel = centered(
+        area,
+        area.width.saturating_sub(4),
+        area.height.saturating_sub(1),
+    );
+    buffer.panel(panel, " CONNECT FOUR // NEON DROP ", YELLOW, SURFACE);
+    let inner = panel.inset(2);
+    let slot_width = 5;
+    let board = Rect::new(
+        inner.x,
+        inner.y,
+        CONNECT_FOUR_WIDTH as u16 * slot_width + 2,
+        CONNECT_FOUR_HEIGHT as u16 * 2 + 3,
+    );
+    let board_background = Color::Rgb {
+        r: 22,
+        g: 62,
+        b: 132,
+    };
+    buffer.panel(board, " DROP ZONE ", BLUE, board_background);
+    for column in 0..CONNECT_FOUR_WIDTH {
+        let x = board.x + 1 + column as u16 * slot_width;
+        let selected = column == session.cursor_column() && !session.is_game_over();
+        buffer.centered_text(
+            Rect::new(x, board.y + 1, slot_width, 1),
+            board.y + 1,
+            if selected { "▼" } else { "·" },
+            Paint::new(
+                if selected { YELLOW } else { BORDER },
+                board_background,
+                true,
+            ),
+        );
+    }
+    for row in 0..CONNECT_FOUR_HEIGHT {
+        for column in 0..CONNECT_FOUR_WIDTH {
+            let x = board.x + 1 + column as u16 * slot_width;
+            let y = board.y + 2 + row as u16 * 2;
+            let slot = Rect::new(x, y, slot_width, 2);
+            buffer.fill(slot, Paint::new(TEXT, board_background, false));
+            let (glyph, color) = match session.board()[row * CONNECT_FOUR_WIDTH + column] {
+                ConnectFourCell::Empty => ("●", Color::Rgb { r: 8, g: 15, b: 31 }),
+                ConnectFourCell::Player => ("●", RED),
+                ConnectFourCell::Cpu => ("●", YELLOW),
+            };
+            buffer.centered_text(slot, y, glyph, Paint::new(color, board_background, true));
+            buffer.centered_text(slot, y + 1, "●", Paint::new(color, board_background, true));
+        }
+    }
+    let hud = Rect::new(
+        board.x + board.width + 2,
+        inner.y,
+        inner.width.saturating_sub(board.width + 2),
+        board.height,
+    );
+    let status = match session.outcome() {
+        Some(ConnectFourOutcome::PlayerWin) => "YOU WIN",
+        Some(ConnectFourOutcome::CpuWin) => "CPU WINS",
+        Some(ConnectFourOutcome::Draw) => "DRAW",
+        None => "YOUR TURN",
+    };
+    draw_simple_hud(
+        buffer,
+        hud,
+        " DUEL HUD ",
+        &[
+            ("AI", session.difficulty().label().to_string(), YELLOW),
+            (
+                "STATUS",
+                status.to_string(),
+                if session.outcome() == Some(ConnectFourOutcome::PlayerWin) {
+                    GREEN
+                } else {
+                    CYAN
+                },
+            ),
+            ("MOVES", session.player_moves().to_string(), BLUE),
+            ("YOU / CPU", "●  /  ●".to_string(), RED),
+        ],
+        "← → SELECT · ENTER DROP",
+    );
+}
+
+fn draw_memory_match(buffer: &mut Buffer, app: &App, area: Rect) {
+    let Some(session) = app.memory_match_session() else {
+        return;
+    };
+    let panel = centered(
+        area,
+        area.width.saturating_sub(4),
+        area.height.saturating_sub(1),
+    );
+    buffer.panel(panel, " MEMORY // SIGNAL PAIRS ", PURPLE, SURFACE);
+    let inner = panel.inset(2);
+    let card_width = 7;
+    let card_height = 3;
+    let board = Rect::new(
+        inner.x,
+        inner.y,
+        session.width() as u16 * card_width,
+        session.height() as u16 * card_height,
+    );
+    for y in 0..session.height() {
+        for x in 0..session.width() {
+            let index = y * session.width() + x;
+            let card = session.cards()[index];
+            let selected = index == session.cursor() && !session.awaiting_continue();
+            let rect = Rect::new(
+                board.x + x as u16 * card_width,
+                board.y + y as u16 * card_height,
+                card_width.saturating_sub(1),
+                card_height,
+            );
+            let (background, border, glyph, foreground) = match card.state {
+                MemoryCardState::Hidden => (
+                    PANEL_ALT,
+                    if selected { YELLOW } else { BORDER_BRIGHT },
+                    "◇",
+                    if selected { YELLOW } else { CYAN },
+                ),
+                MemoryCardState::Revealed => (
+                    Color::Rgb {
+                        r: 49,
+                        g: 38,
+                        b: 87,
+                    },
+                    YELLOW,
+                    memory_symbol(card.symbol),
+                    memory_symbol_color(card.symbol),
+                ),
+                MemoryCardState::Matched => (
+                    Color::Rgb {
+                        r: 20,
+                        g: 76,
+                        b: 62,
+                    },
+                    GREEN,
+                    memory_symbol(card.symbol),
+                    TEXT,
+                ),
+            };
+            buffer.panel(rect, "", border, background);
+            buffer.centered_text(
+                rect,
+                rect.y + 1,
+                glyph,
+                Paint::new(foreground, background, true),
+            );
+        }
+    }
+    let hud = Rect::new(
+        board.x + board.width + 2,
+        inner.y,
+        inner.width.saturating_sub(board.width + 2),
+        board.height.max(12).min(inner.height),
+    );
+    let status = if session.awaiting_continue() {
+        "MEMORIZE · ENTER"
+    } else {
+        "FIND THE PAIR"
+    };
+    draw_simple_hud(
+        buffer,
+        hud,
+        " MEMORY CORE ",
+        &[
+            ("MODE", session.difficulty().label().to_string(), PURPLE),
+            ("STATUS", status.to_string(), CYAN),
+            (
+                "PAIRS",
+                format!("{} / {}", session.matched_pairs(), session.pair_count()),
+                GREEN,
+            ),
+            ("MOVES", session.moves().to_string(), YELLOW),
+        ],
+        "ENTER FLIP / CONTINUE",
+    );
+}
+
+fn memory_symbol(symbol: u8) -> &'static str {
+    const SYMBOLS: [&str; 12] = ["◆", "●", "▲", "■", "✦", "✚", "◈", "⬟", "☾", "☀", "♠", "♥"];
+    SYMBOLS[usize::from(symbol) % SYMBOLS.len()]
+}
+
+fn memory_symbol_color(symbol: u8) -> Color {
+    match symbol % 6 {
+        0 => CYAN,
+        1 => YELLOW,
+        2 => RED,
+        3 => GREEN,
+        4 => PINK,
+        _ => BLUE,
+    }
+}
+
+fn draw_maze(buffer: &mut Buffer, app: &App, area: Rect) {
+    let Some(session) = app.maze_session() else {
+        return;
+    };
+    let panel = centered(area, area.width.saturating_sub(2), area.height);
+    buffer.panel(panel, " MAZE // NEON LABYRINTH ", GREEN, SURFACE);
+    let inner = panel.inset(1);
+    let maze_width = session.width() as u16;
+    let cell_width = if inner.width >= maze_width.saturating_mul(2).saturating_add(20) {
+        2
+    } else {
+        1
+    };
+    let board = Rect::new(
+        inner.x,
+        inner.y,
+        maze_width.saturating_mul(cell_width),
+        session.height() as u16,
+    );
+    for y in 0..session.height() {
+        for x in 0..session.width() {
+            let index = y * session.width() + x;
+            let rect = Rect::new(
+                board.x + x as u16 * cell_width,
+                board.y + y as u16,
+                cell_width,
+                1,
+            );
+            let (glyph, foreground, background) = if index == session.player() {
+                ("◆", BG, YELLOW)
+            } else if index == session.goal() {
+                ("◎", BG, GREEN)
+            } else if session.is_wall(index) {
+                (
+                    " ",
+                    BLUE,
+                    if (x + y) % 2 == 0 {
+                        Color::Rgb {
+                            r: 35,
+                            g: 86,
+                            b: 140,
+                        }
+                    } else {
+                        Color::Rgb {
+                            r: 28,
+                            g: 69,
+                            b: 119,
+                        }
+                    },
+                )
+            } else if session.was_visited(index) {
+                ("·", CYAN, Color::Rgb { r: 8, g: 31, b: 39 })
+            } else {
+                (" ", MUTED, BG)
+            };
+            buffer.fill(rect, Paint::new(foreground, background, true));
+            let glyph_x = rect.x + rect.width.saturating_sub(glyph.width() as u16) / 2;
+            buffer.text(
+                glyph_x,
+                rect.y,
+                glyph,
+                Paint::new(foreground, background, true),
+            );
+        }
+    }
+    let hud = Rect::new(
+        board.x + board.width + 2,
+        inner.y,
+        inner.width.saturating_sub(board.width + 2),
+        board.height.min(inner.height),
+    );
+    let efficiency = if session.steps() == 0 {
+        100
+    } else {
+        (u64::from(session.optimal_steps()) * 100 / u64::from(session.steps()).max(1)).min(100)
+    };
+    draw_simple_hud(
+        buffer,
+        hud,
+        " PATHFINDER ",
+        &[
+            ("ZONE", session.difficulty().label().to_string(), GREEN),
+            ("STEPS", session.steps().to_string(), YELLOW),
+            ("PAR", session.optimal_steps().to_string(), BLUE),
+            ("EFFICIENCY", format!("{}%", efficiency), CYAN),
+        ],
+        "◆ YOU   ◎ EXIT",
+    );
+}
+
+fn draw_result(buffer: &mut Buffer, app: &App, area: Rect) {
+    let Some(result) = app.result() else {
+        return;
+    };
+    let kind = app.catalog().find_game(&result.game_id).and_then(|game| {
         game.stages
             .iter()
             .find(|stage| stage.id == result.stage_id)
@@ -2200,20 +2681,16 @@ fn draw_simple_hud(
 ) {
     buffer.panel(rect, title, BORDER, PANEL);
     let inner = rect.inset(2);
+    let footer_y = inner.y + inner.height.saturating_sub(1);
     for (index, (label, value, color)) in rows.iter().enumerate() {
         let y = inner.y + index as u16 * 2;
-        if y >= inner.y + inner.height.saturating_sub(2) {
+        if y.saturating_add(1) >= footer_y {
             break;
         }
         buffer.text(inner.x, y, label, Paint::new(MUTED, PANEL, false));
         buffer.text(inner.x, y + 1, value, Paint::new(*color, PANEL, true));
     }
-    buffer.text(
-        inner.x,
-        inner.y + inner.height.saturating_sub(2),
-        footer,
-        Paint::new(MUTED, PANEL, false),
-    );
+    buffer.text(inner.x, footer_y, footer, Paint::new(MUTED, PANEL, false));
 }
 
 fn draw_bar(buffer: &mut Buffer, rect: Rect, ratio: f64, foreground: Color, background: Color) {
@@ -2281,6 +2758,10 @@ fn game_icon(kind: Option<GameKind>) -> &'static str {
         Some(GameKind::Holdem) => "♦",
         Some(GameKind::TypingPractice) => "⌨",
         Some(GameKind::Breakout) => "▰",
+        Some(GameKind::Minesweeper) => "✹",
+        Some(GameKind::ConnectFour) => "●",
+        Some(GameKind::MemoryMatch) => "◆",
+        Some(GameKind::Maze) => "⌗",
         None => "◇",
     }
 }
@@ -2307,6 +2788,10 @@ fn game_color(kind: GameKind) -> Color {
             g: 169,
             b: 255,
         },
+        GameKind::Minesweeper => CYAN,
+        GameKind::ConnectFour => YELLOW,
+        GameKind::MemoryMatch => PURPLE,
+        GameKind::Maze => GREEN,
     }
 }
 
@@ -2576,7 +3061,7 @@ fn roulette_number_label(number: u8) -> String {
 }
 
 fn gambling_feedback_line(app: &App) -> Option<String> {
-    app.gambling_feedback.clone()
+    app.gambling_feedback().map(str::to_string)
 }
 
 fn gambling_wager_label(app: &App) -> String {
@@ -2653,6 +3138,29 @@ fn result_lines(result: &crate::round::RoundResult, kind: Option<GameKind>) -> V
             format!("BRICKS  {}", result.correct_answers),
             time,
         ],
+        Some(GameKind::Minesweeper) => vec![
+            format!("SCORE  {}", result.score),
+            format!("SAFE ACTIONS  {}", result.correct_answers),
+            format!("ACCURACY  {}%", result.accuracy_percent()),
+            time,
+        ],
+        Some(GameKind::ConnectFour) => vec![
+            format!("SCORE  {}", result.score),
+            format!("MOVES  {}", result.attempts),
+            time,
+        ],
+        Some(GameKind::MemoryMatch) => vec![
+            format!("SCORE  {}", result.score),
+            format!("PAIRS  {}", result.correct_answers),
+            format!("MOVES  {}", result.attempts),
+            time,
+        ],
+        Some(GameKind::Maze) => vec![
+            format!("SCORE  {}", result.score),
+            format!("STEPS  {}", result.attempts),
+            format!("EFFICIENCY  {}%", result.accuracy_percent()),
+            time,
+        ],
         _ => vec![
             format!("CORRECT  {}", result.correct_answers),
             format!("ACCURACY  {}%", result.accuracy_percent()),
@@ -2677,6 +3185,10 @@ fn game_summary(game: &GameDefinition) -> &'static str {
         GameKind::Holdem => "AI와 프리플랍부터 리버까지 겨루고 쇼다운에서 족보를 비교합니다.",
         GameKind::TypingPractice => "문장을 정확히 입력할 때마다 1원을 채굴합니다.",
         GameKind::Breakout => "패들로 공을 튕겨 모든 벽돌을 파괴합니다.",
+        GameKind::Minesweeper => "숫자 단서를 읽고 깃발을 세워 안전 구역을 모두 확보합니다.",
+        GameKind::ConnectFour => "AI보다 먼저 네 개의 디스크를 가로·세로·대각선으로 연결합니다.",
+        GameKind::MemoryMatch => "카드의 위치를 기억해 모든 심볼 쌍을 최소 이동으로 찾습니다.",
+        GameKind::Maze => "자동 생성된 네온 미로에서 흔적을 따라 출구까지 탈출합니다.",
     }
 }
 
@@ -2694,6 +3206,12 @@ fn stage_description(kind: GameKind, stage: &StageDefinition) -> &'static str {
         GameKind::Holdem => "C/Enter 체크·콜 · R 레이즈 · F 폴드 · AI 난이도는 매 판 랜덤입니다.",
         GameKind::TypingPractice => "문장 전체가 정확히 일치해야 1원을 받습니다.",
         GameKind::Breakout => "자동으로 움직이는 공을 패들로 받아 벽돌을 모두 부숩니다.",
+        GameKind::Minesweeper => {
+            "첫 선택은 항상 안전하며, 단계마다 보드 크기와 지뢰 수가 증가합니다."
+        }
+        GameKind::ConnectFour => "단계에 따라 랜덤 AI부터 5수 앞을 읽는 AI까지 대결합니다.",
+        GameKind::MemoryMatch => "틀린 두 카드는 Enter를 눌러 확인한 뒤 다시 덮습니다.",
+        GameKind::Maze => "매 판 새로 생성되는 완전 미로에서 최단 경로에 도전합니다.",
     }
 }
 
@@ -2711,6 +3229,10 @@ fn game_controls(kind: GameKind) -> &'static str {
         GameKind::Holdem => "테이블에서 숫자 베팅 · C 체크 · R/T/Y 추가 베팅 · F 폴드",
         GameKind::TypingPractice => "문장 입력 · Enter 제출 · Backspace 수정",
         GameKind::Breakout => "방향키/A-D 패들 이동 · Esc 중단",
+        GameKind::Minesweeper => "방향키/WASD 이동 · Enter 공개 · F 깃발",
+        GameKind::ConnectFour => "좌우 칸 선택 · Enter 디스크 놓기",
+        GameKind::MemoryMatch => "방향키/WASD 카드 선택 · Enter 뒤집기",
+        GameKind::Maze => "방향키/WASD 이동 · Esc 중단",
     }
 }
 
@@ -2728,5 +3250,18 @@ fn stage_time_limit(stage: &StageDefinition) -> String {
         "무제한".to_string()
     } else {
         format!("{}초", stage.time_limit.as_secs())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cabinet_window_keeps_late_games_visible() {
+        assert_eq!(cabinet_window_start(0, 11, 7), 0);
+        assert_eq!(cabinet_window_start(5, 11, 7), 2);
+        assert_eq!(cabinet_window_start(10, 11, 7), 4);
+        assert_eq!(cabinet_window_start(0, 0, 0), 0);
     }
 }

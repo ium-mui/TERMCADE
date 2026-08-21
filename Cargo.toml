@@ -2,8 +2,14 @@
 name = "cli-game"
 version = "1.0.0"
 edition = "2024"
-description = "확장 가능한 TUI CLI 게임"
+rust-version = "1.85"
+description = "A collection of terminal arcade games built with Rust"
 license = "MIT"
+repository = "https://github.com/ium-mui/TERMCADE"
+homepage = "https://github.com/ium-mui/TERMCADE"
+readme = "README.md"
+keywords = ["terminal", "tui", "game", "arcade", "cli"]
+categories = ["command-line-utilities", "games"]
 
 [[bin]]
 name = "tcade"
@@ -22,3 +28,6 @@ unicode-width = "0.2"
 
 [dev-dependencies]
 tempfile = "3.13"
+
+[lints.rust]
+unsafe_code = "forbid"

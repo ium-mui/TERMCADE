@@ -2,34 +2,48 @@
 
 <img src="assets/termcade-logo.png" alt="TERMCADE" width="900">
 
-### 터미널 안에 들어온 작은 아케이드
+### A pocket arcade for your terminal
 
-Rust와 `crossterm` 기반의 경량 렌더러로 만든 한국어 TUI 게임 모음입니다.
-짧게 한 판 즐기고, 기록과 지갑을 쌓아보세요.
+A collection of terminal games built in Rust with a lightweight `crossterm` renderer.
+Play a quick round, keep your history, and grow a shared in-game wallet.
 
-[설치](#설치) · [게임](#게임) · [조작법](#조작법) · [개발](#개발)
+[English](README.md) · [한국어](README.ko.md) · [简体中文](README.zh-CN.md)
+
+[![CI](https://github.com/ium-mui/TERMCADE/actions/workflows/ci.yml/badge.svg)](https://github.com/ium-mui/TERMCADE/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/ium-mui/TERMCADE)](https://github.com/ium-mui/TERMCADE/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+[Install](#install) · [Games](#games) · [Controls](#controls) · [Documentation](#documentation) · [Contributing](#contributing)
 
 </div>
 
-## 설치
+## Install
 
-Rust가 설치되어 있다면 GitHub에서 바로 설치할 수 있습니다.
+Download the archive for your platform from the [latest GitHub Release](https://github.com/ium-mui/TERMCADE/releases/latest), extract it, and place `tcade` (or `tcade.exe`) somewhere on your `PATH`. Every release includes SHA-256 checksums.
+
+Supported release targets are:
+
+- Linux x86-64 and ARM64
+- macOS Intel and Apple Silicon
+- Windows x86-64
+
+If Rust 1.85 or newer is installed, you can build directly from GitHub:
 
 ```bash
-cargo install --git https://github.com/ium-mui/TERMCADE.git
+cargo install --git https://github.com/ium-mui/TERMCADE.git --locked
 tcade
 ```
 
-소스 코드를 내려받아 로컬에서 설치하려면:
+To work from a local clone:
 
 ```bash
 git clone https://github.com/ium-mui/TERMCADE.git
 cd TERMCADE
-cargo install --path .
+cargo install --path . --locked
 tcade
 ```
 
-설치하지 않고 개발 모드로 실행할 때는 `cargo run`을 사용합니다.
+Run without installing during development:
 
 ```bash
 cargo run --
@@ -37,58 +51,66 @@ cargo run -- math
 cargo run -- snake classic-1
 ```
 
-## 게임
+## Games
 
-| 게임 | 명령어 | 내용 |
+| Game | Example command | Objective |
 | --- | --- | --- |
-| 암산 | `math` | 덧셈·뺄셈·곱셈·나눗셈 문제를 빠르게 풀기 |
-| 스네이크 | `snake classic-1` | 벽과 자신의 몸을 피해 오래 살아남기 |
-| 틱택토 | `tictactoe classic-1` | 3×3 보드에서 컴퓨터와 대결하기 |
-| 2048 | `2048 classic-1` | 타일을 합쳐 2048 만들기 |
-| 스도쿠 | `sudoku classic-1` | 숫자를 채워 퍼즐 완성하기 |
-| 도박장 | `gambling` | 블랙잭·룰렛·슬롯·타자 채굴 즐기기 |
-| 벽돌깨기 | `breakout classic-1` | 패들로 공을 받아 벽돌 부수기 |
+| Mental math | `math` | Solve addition, subtraction, multiplication, and division quickly |
+| Snake | `snake classic-1` | Survive without hitting a wall or your own body |
+| Tic-tac-toe | `tictactoe classic-1` | Beat the computer on a 3×3 board |
+| 2048 | `2048 classic-1` | Combine tiles to create 2048 |
+| Sudoku | `sudoku classic-1` | Complete a uniquely solvable number puzzle |
+| Minesweeper | `minesweeper beginner` | Reveal every safe cell while avoiding mines |
+| Connect Four | `connect-four easy` | Connect four discs before the difficulty-aware AI |
+| Memory Match | `memory small` | Remember card positions and find every pair |
+| Maze | `maze alley` | Find the exit from a newly generated maze |
+| Casino | `gambling` | Play blackjack, roulette, slots, AI hold'em, and typing mine |
+| Breakout | `breakout classic-1` | Keep the ball in play and clear the bricks |
 
-게임을 실행하면 게임 선택 화면에서 원하는 게임과 스테이지를 고를 수 있습니다.
-게임·스테이지를 명령어로 바로 지정할 수도 있습니다.
+Launch `tcade` to choose a cabinet and stage interactively, or provide them directly:
 
 ```bash
-tcade
-tcade math addition-1
 tcade gambling blackjack-1
-tcade gambling roulette-1
-tcade gambling slots-1
-tcade gambling typing-mine
-tcade breakout classic-1
+tcade gambling holdem-1
+tcade minesweeper expert
+tcade connect-four hard
+tcade memory grand
+tcade maze abyss
+tcade snake turbo
+tcade sudoku hard
 ```
 
-## 조작법
+## Controls
 
-- `↑` `↓` `←` `→` 또는 게임에 따라 `W` `A` `S` `D`: 이동
-- `Enter`: 선택·제출·실행
-- `Space`: 게임별 보조 동작
-- `Backspace`: 스도쿠 숫자 지우기
-- `Esc` 또는 `Q`: 뒤로 가기·게임 종료
-- `Ctrl+C`: 즉시 종료
+- Arrow keys, or `W` `A` `S` `D` where supported: move
+- `Enter`: select, submit, reveal, or perform the primary action
+- `Space`: game-specific secondary action
+- `Backspace`: erase a Sudoku digit
+- `Esc` or `Q`: go back or leave a game
+- `Ctrl+C`: exit immediately
 
-암산은 숫자 키로 답을 입력하고 `Enter`로 제출합니다. 스도쿠는 칸을 선택한 뒤 숫자를 바로 입력합니다. 블랙잭에서는 `H`/`Enter`로 히트, `S`/`Space`로 스탠드합니다. 룰렛은 `1`·`2`·`3`으로 색을 고른 뒤 `Enter`로 돌립니다.
+Minesweeper uses `F` to place a flag. Connect Four uses left and right to choose a column. Memory Match uses `Enter` to reveal cards and acknowledge a mismatch. Casino tables display their exact betting and action keys in the game view.
 
-도박 게임은 1원 베팅 방식이며 당첨 배당금은 공용 지갑에 누적됩니다. 타자 채굴은 문장을 정확히 입력할 때마다 1원을 지급합니다.
+## Data and terminal requirements
 
-## 기록과 지갑
+Results, history, and wallet balance are stored as JSON in the operating system's application data directory. TERMCADE never silently overwrites a damaged history file. A terminal size of at least `64×24` is recommended so detailed boards are not clipped.
 
-플레이 결과, 전체 이력, 지갑 잔액은 운영체제별 앱 데이터 디렉터리의 JSON 파일에 저장됩니다. 오락실 플로어·캐비닛 입장·게임별 플레이 화면을 제공하며, 상세 보드가 잘리지 않도록 최소 `64×24` 크기를 권장합니다.
+## Documentation
 
-## 개발
+- [Documentation index](docs/README.md)
+- [Game and stage reference](docs/GAMES.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Development guide](docs/DEVELOPMENT.md)
+- [Issue, branch, commit, and pull request workflow](docs/GIT_WORKFLOW.md)
+- [Release and deployment process](docs/RELEASING.md)
+- [Translation policy](docs/TRANSLATIONS.md)
 
-```bash
-cargo test
-cargo clippy -- -D warnings
-cargo fmt -- --check
-```
+## Contributing
 
-새 게임은 `GameModule`을 구현해 `GameCatalog`에 등록하고, 새 스테이지는 `StageDefinition`으로 추가할 수 있습니다. 라운드 엔진과 TUI 화면은 게임별 생성 규칙과 분리되어 있습니다.
+Contributions are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md), discuss substantial changes in an issue, and run `./scripts/check.sh` before opening a pull request. Participation is governed by the [Code of Conduct](CODE_OF_CONDUCT.md).
 
-## 라이선스
+For help, see [SUPPORT.md](SUPPORT.md). Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
 
-MIT
+## License
+
+TERMCADE is available under the [MIT License](LICENSE).

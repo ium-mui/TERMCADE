@@ -1,0 +1,49 @@
+name: Feature request
+description: Propose a focused improvement or a new game.
+title: "feat: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or opportunity
+      description: Explain the user need before describing a solution.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe behavior, controls, and scope.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      placeholder: |
+        - [ ] Observable outcome one
+        - [ ] Observable outcome two
+  - type: dropdown
+    id: contribution
+    attributes:
+      label: Contribution
+      description: Would you like to work on this after the proposal is accepted?
+      options:
+        - Yes
+        - Maybe, with guidance
+        - No
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-submission checklist
+      options:
+        - label: I searched existing issues and documentation for this request.
+          required: true
