@@ -1,10 +1,10 @@
 use std::io;
 
 use clap::Parser;
-use cli_game::app::run_tui;
 use cli_game::cli::{Cli, resolve_route};
 use cli_game::domain::GameCatalog;
 use cli_game::history::JsonHistoryStore;
+use cli_game::run_tui;
 
 fn main() -> io::Result<()> {
     let cli = Cli::parse();

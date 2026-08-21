@@ -15,6 +15,39 @@ pub const INITIAL_SNAKE_LENGTH: usize = 3;
 pub const DEFAULT_MOVE_INTERVAL: Duration = Duration::from_millis(160);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SnakePace {
+    Relaxed,
+    Classic,
+    Turbo,
+}
+
+impl SnakePace {
+    fn from_stage_id(stage_id: &StageId) -> Self {
+        match stage_id.as_str() {
+            "relaxed" => Self::Relaxed,
+            "turbo" => Self::Turbo,
+            _ => Self::Classic,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Relaxed => "RELAXED",
+            Self::Classic => "CLASSIC",
+            Self::Turbo => "TURBO",
+        }
+    }
+
+    pub fn move_interval(self) -> Duration {
+        match self {
+            Self::Relaxed => Duration::from_millis(230),
+            Self::Classic => DEFAULT_MOVE_INTERVAL,
+            Self::Turbo => Duration::from_millis(95),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Point {
     pub x: i32,
     pub y: i32,
@@ -60,6 +93,7 @@ pub struct SnakeSession {
     food: Point,
     direction: Direction,
     pending_direction: Direction,
+    pace: SnakePace,
     started: bool,
     last_move: Instant,
     move_interval: Duration,
@@ -82,6 +116,7 @@ impl SnakeSession {
         seed: u64,
         clock: Arc<dyn Clock>,
     ) -> Self {
+        let pace = SnakePace::from_stage_id(&stage_id);
         let center = Point {
             x: BOARD_WIDTH / 2,
             y: BOARD_HEIGHT / 2,
@@ -109,9 +144,10 @@ impl SnakeSession {
             food: center,
             direction: Direction::Right,
             pending_direction: Direction::Right,
+            pace,
             started: false,
             last_move: started_instant,
-            move_interval: DEFAULT_MOVE_INTERVAL,
+            move_interval: pace.move_interval(),
             score: 0,
             game_over: false,
         };
@@ -133,6 +169,10 @@ impl SnakeSession {
 
     pub fn score(&self) -> u32 {
         self.score
+    }
+
+    pub fn pace(&self) -> SnakePace {
+        self.pace
     }
 
     pub fn is_game_over(&self) -> bool {
@@ -255,6 +295,16 @@ mod tests {
         let session = SnakeSession::with_seed(GameId::new("snake"), StageId::new("classic-1"), 10);
         assert_eq!(session.snake().len(), INITIAL_SNAKE_LENGTH);
         assert!(!session.snake().contains(&session.food()));
+    }
+
+    #[test]
+    fn stages_change_the_actual_move_interval() {
+        let relaxed = SnakeSession::with_seed(GameId::new("snake"), StageId::new("relaxed"), 1);
+        let classic = SnakeSession::with_seed(GameId::new("snake"), StageId::new("classic-1"), 1);
+        let turbo = SnakeSession::with_seed(GameId::new("snake"), StageId::new("turbo"), 1);
+        assert!(relaxed.move_interval > classic.move_interval);
+        assert!(classic.move_interval > turbo.move_interval);
+        assert_eq!(turbo.pace(), SnakePace::Turbo);
     }
 
     #[test]
