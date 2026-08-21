@@ -16,7 +16,7 @@ cd TERMCADE
 ./scripts/check.sh
 ```
 
-The script performs the same documentation parity, formatting, Clippy, and test checks as CI. Use narrower commands while iterating:
+The script performs the same documentation, formatting, Clippy, and test checks as CI. Use narrower commands while iterating:
 
 ```bash
 cargo test casino
@@ -34,7 +34,7 @@ cargo fmt --all
 5. Connect keys in `App::handle_playing`, leaving rule calculation in the session.
 6. Add the play view and control hints in `ui.rs`, using only public read-only accessors.
 7. Extend the default-stage table and core user-flow coverage in `tests/app_flows.rs`.
-8. Update the affected supported-language game references, then run `./scripts/check.sh`.
+8. Update the game reference, then run `./scripts/check.sh`.
 
 ## Game-session contract
 
@@ -59,7 +59,7 @@ Keep individual game-rule tests in the corresponding module. Use seeded construc
 
 ## Documentation changes
 
-English, Korean, and Simplified Chinese are parallel documentation editions. Start in any supported language, update the related editions when practical, and request language review in the pull request when needed. Follow [TRANSLATIONS.md](TRANSLATIONS.md); CI verifies that each language has the expected files.
+Keep documentation consistent with the current code and user-visible behavior. Include related documentation changes in the same pull request when practical.
 
 ## Definition of done
 
@@ -68,5 +68,5 @@ English, Korean, and Simplified Chinese are parallel documentation editions. Sta
 - Persistence failure never produces a false success message or in-memory wallet change.
 - New routing passes the `GameSession` and catalog validation paths.
 - `./scripts/check.sh` succeeds.
-- User-facing behavior, architecture, and translations are updated where affected.
+- User-facing behavior and architecture documentation are updated where affected.
 - The branch, commit, and pull request follow [GIT_WORKFLOW.md](GIT_WORKFLOW.md).

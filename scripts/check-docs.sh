@@ -3,10 +3,10 @@ set -eu
 
 status=0
 
-for document in README ARCHITECTURE DEVELOPMENT GAMES GIT_WORKFLOW RELEASING TRANSLATIONS; do
+for document in README ARCHITECTURE DEVELOPMENT GAMES GIT_WORKFLOW RELEASING; do
   english_file="docs/${document}.md"
   if [ ! -f "$english_file" ]; then
-    echo "Missing English document: $english_file" >&2
+    echo "Missing document: $english_file" >&2
     status=1
   fi
 
@@ -22,7 +22,7 @@ done
 for document in CONTRIBUTING SECURITY; do
   english_file="${document}.md"
   if [ ! -f "$english_file" ]; then
-    echo "Missing English document: $english_file" >&2
+    echo "Missing document: $english_file" >&2
     status=1
   fi
 
