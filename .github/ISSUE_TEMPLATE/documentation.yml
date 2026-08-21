@@ -16,9 +16,10 @@ body:
     attributes:
       label: Language
       options:
-        - English (canonical)
+        - English
         - Korean
         - Simplified Chinese
+        - Multiple languages
         - New translation
     validations:
       required: true

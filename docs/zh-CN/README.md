@@ -2,22 +2,19 @@
 
 [English](../README.md) · [한국어](../ko/README.md) · [简体中文](README.md)
 
-英文是唯一的规范来源。韩文和简体中文翻译在各自语言目录中使用相同文件名，因此今后可以在不改变英文链接的前提下增加语言。
+TERMCADE 文档以英语、韩语和简体中文平行维护。仓库中的文件位置只是一种目录约定，不代表某种语言具有更高权威。不同语言内容不一致时，请根据代码、测试和当前版本的实际行为确认，并修正相关文档。
 
-## 用户文档
+## 使用 TERMCADE
 
-- [项目简介与安装](../../README.zh-CN.md)
+- [项目介绍、安装和操作](../../README.zh-CN.md)
 - [游戏与关卡](GAMES.md)
-- [支持](SUPPORT.md)
-- [安全政策](SECURITY.md)
 
-## 贡献者文档
+## 开发 TERMCADE
 
 - [贡献指南](CONTRIBUTING.md)
 - [开发指南](DEVELOPMENT.md)
 - [架构](ARCHITECTURE.md)
 - [Git 工作流](GIT_WORKFLOW.md)
 - [发布流程](RELEASING.md)
-- [翻译政策](TRANSLATIONS.md)
-- [项目治理](GOVERNANCE.md)
-- [行为准则](CODE_OF_CONDUCT.md)
+- [语言支持](TRANSLATIONS.md)
+- [安全相关 Bug](SECURITY.md)

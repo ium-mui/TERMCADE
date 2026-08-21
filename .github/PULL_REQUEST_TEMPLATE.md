@@ -19,8 +19,7 @@
 
 ## Documentation and release
 
-- [ ] English canonical documentation is updated
-- [ ] Korean and Simplified Chinese translations are updated, or a follow-up issue is linked
+- [ ] Relevant supported-language documents are updated or marked for language review
 - [ ] The PR title follows Conventional Commits and describes one logical change
 - [ ] User-visible changes are suitable for the generated changelog
 
