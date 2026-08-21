@@ -36,7 +36,7 @@ Do not edit the automated release PR's version or changelog without a documented
 4. Configure the protected `main` rules in [GIT_WORKFLOW.md](GIT_WORKFLOW.md).
 5. Create the labels listed in the Git workflow, plus Release Please labels `autorelease: pending`, `autorelease: tagged`, and `autorelease: snapshot` if automation does not create them automatically.
 
-The workflow falls back to `GITHUB_TOKEN`, but pull requests created by that token do not start other workflows. The dedicated token is therefore required for fully automatic release-PR CI.
+Without `RELEASE_PLEASE_TOKEN`, the workflow uses `GITHUB_TOKEN` only to publish a release whose structured Release Please PR was already merged; it does not attempt to open the next release PR. The dedicated token enables release-PR creation and is therefore required for fully automatic release management and release-PR CI.
 
 ## Supported artifacts
 

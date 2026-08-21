@@ -36,7 +36,7 @@ Release Please 更新 `Cargo.toml`、`Cargo.lock`、`CHANGELOG.md` 和 `.release
 4. 按 [Git 工作流](GIT_WORKFLOW.md)配置 `main` 保护规则。
 5. 创建 Git 文档列出的标签；若自动化未创建，再添加 `autorelease: pending`、`autorelease: tagged` 和 `autorelease: snapshot`。
 
-workflow 会回退到 `GITHUB_TOKEN`，但该令牌创建的 PR 不会触发其他 workflow，因此完全自动的发布 PR CI 需要专用令牌。
+没有 `RELEASE_PLEASE_TOKEN` 时，workflow 只使用 `GITHUB_TOKEN` 发布已经合并了结构化 Release Please PR 的版本，不会尝试创建下一个发布 PR。专用令牌会启用发布 PR 创建，因此完全自动的发布管理和发布 PR CI 需要该令牌。
 
 ## 支持的产物
 

@@ -36,7 +36,7 @@ Release Please는 `Cargo.toml`, `Cargo.lock`, `CHANGELOG.md`, `.release-please-m
 4. [Git 작업 규칙](GIT_WORKFLOW.md)에 따라 `main` 보호 규칙을 설정합니다.
 5. Git 문서의 레이블과 `autorelease: pending`, `autorelease: tagged`, `autorelease: snapshot` 레이블을 자동 생성되지 않은 경우 만듭니다.
 
-workflow는 `GITHUB_TOKEN`으로 fallback하지만 그 토큰이 만든 PR은 다른 workflow를 시작하지 않습니다. 완전한 릴리스 PR CI 자동화를 위해 전용 토큰이 필요합니다.
+`RELEASE_PLEASE_TOKEN`이 없으면 workflow는 이미 구조화된 Release Please PR이 병합된 릴리스를 게시할 때만 `GITHUB_TOKEN`을 사용하며 다음 릴리스 PR 생성을 시도하지 않습니다. 전용 토큰은 릴리스 PR 생성까지 활성화하므로 완전한 릴리스 관리와 릴리스 PR CI 자동화에 필요합니다.
 
 ## 지원 아티팩트
 
