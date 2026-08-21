@@ -2,20 +2,17 @@
 
 [English](CONTRIBUTING.md) · [한국어](docs/ko/CONTRIBUTING.md) · [简体中文](docs/zh-CN/CONTRIBUTING.md)
 
-Thank you for helping improve TERMCADE. Contributions of code, tests, documentation, translations, bug reports, and design feedback are welcome.
-
-By participating, you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md). Do not use public issues for vulnerabilities; follow the private process in [SECURITY.md](SECURITY.md).
+Contributions to the game, tests, documentation, and translations are welcome. English, Korean, and Simplified Chinese are supported documentation languages; a contribution may start in any of them.
 
 ## Before starting
 
-1. Search existing issues and pull requests.
-2. Open a feature request before implementing a new game, dependency, persistence format, public interface, or large architectural change.
-3. Wait for an `accepted` decision before investing in substantial work. Maintainer discussion defines scope but does not guarantee a merge.
-4. Small bug fixes, tests, and documentation corrections may go directly to a pull request when the intent is clear.
+- Search existing issues and pull requests.
+- Open an issue before adding a game, changing saved-data compatibility, or making a large architectural change.
+- Small fixes and documentation corrections may go directly to a pull request.
 
 ## Development workflow
 
-Fork the repository, create a branch from current `main`, and keep it focused:
+Create a focused branch from the latest `main`:
 
 ```bash
 git clone https://github.com/<your-account>/TERMCADE.git
@@ -25,45 +22,37 @@ git fetch upstream
 git switch -c fix/42-short-description upstream/main
 ```
 
-Rust 1.85 or newer is required. Run the full local gate before submitting:
+Rust 1.85 or newer is required. Run the same checks as CI before submitting:
 
 ```bash
 ./scripts/check.sh
 ```
 
-See the [development guide](docs/DEVELOPMENT.md) for architecture, tests, persistence safety, and the new-game checklist.
+See the [development guide](docs/DEVELOPMENT.md) for architecture, tests, persistence, and the new-game checklist.
 
 ## Change requirements
 
-- Preserve the boundaries in [ARCHITECTURE.md](docs/ARCHITECTURE.md).
-- Add regression tests for fixes and behavior tests for features.
-- Keep random behavior reproducible through seeded construction paths.
-- Treat the history file as durable user data and maintain backward compatibility.
-- Keep `unsafe` code out of the project.
-- Update English documentation and the Korean and Simplified Chinese translations for user-visible changes.
-- Avoid unrelated formatting, dependency upgrades, generated artifacts, and drive-by refactors.
+- Keep game rules independent from terminal rendering.
+- Add tests for new behavior and bug fixes.
+- Keep seeded game behavior reproducible.
+- Preserve compatibility with existing history files, or add an explicit migration.
+- Do not add `unsafe` code, secrets, generated binaries, or unrelated changes.
+- Update the affected language editions of user-facing documentation.
 
-## Commits and pull requests
+## Branches, commits, and pull requests
 
-Branches, commits, and pull requests follow [GIT_WORKFLOW.md](docs/GIT_WORKFLOW.md). In short:
+Follow [GIT_WORKFLOW.md](docs/GIT_WORKFLOW.md). The short version is:
 
-- Use a prefixed kebab-case branch such as `feat/123-new-game`.
-- Write English Conventional Commit subjects such as `fix(ui): avoid clipping narrow boards`.
+- Use a prefixed branch such as `feat/new-game`, `fix/history-write`, or `docs/ko-controls`.
+- Use a Conventional Commit type such as `feat:`, `fix:`, or `docs:`. The summary may be written clearly in any supported documentation language.
 - Make the pull request title a Conventional Commit because it becomes the squash commit.
-- Explain the problem, approach, risks, and exact verification performed.
-- Link the issue with `Closes #123` when the pull request fully resolves it.
-- Respond to review comments and resolve conversations only after the concern is addressed.
+- Explain what changed, why it changed, and how it was verified.
+- Keep one logical change per pull request.
 
-Maintainers may request a smaller scope, additional tests, documentation, or design discussion. A contribution may be declined when it conflicts with project direction, carries disproportionate maintenance cost, lacks a safe migration, or cannot be supported reliably.
+## Documentation languages
 
-## Documentation and translations
+The English, Korean, and Simplified Chinese documents are parallel editions of the same project documentation. File placement does not make one edition authoritative. Start a documentation change in the language you can review accurately, update the related editions when possible, and request language review in the pull request when help is needed. See [TRANSLATIONS.md](docs/TRANSLATIONS.md).
 
-English is canonical. Localized documents are maintained under `docs/ko` and `docs/zh-CN`, with localized project READMEs at the repository root. Follow [TRANSLATIONS.md](docs/TRANSLATIONS.md) when editing or adding a locale.
+## Merge requirements
 
-A translation pull request should identify the source revision it reviewed, preserve code and links exactly, and receive review for both language quality and technical accuracy.
-
-## Review and merge
-
-All required CI jobs must pass and every review conversation must be resolved. An independent maintainer approval is required whenever another maintainer is available. During the solo-maintainer phase, the author records a self-review in the pull request and may merge only after every required check passes. Maintainers normally squash merge and may edit the final title so Release Please can calculate the correct version.
-
-Contributors retain copyright in their work and license submitted contributions under the repository's [MIT License](LICENSE). No separate contributor license agreement is required.
+Required CI checks must pass and review conversations must be resolved. Pull requests are normally squash merged. Submitted work is licensed under the repository's [MIT License](LICENSE); no separate contributor license agreement is required.

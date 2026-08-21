@@ -9,6 +9,8 @@ Play a quick round, keep your history, and grow a shared in-game wallet.
 
 [English](README.md) · [한국어](README.ko.md) · [简体中文](README.zh-CN.md)
 
+Project documentation is maintained in all three languages as parallel editions, with room for more languages.
+
 [![CI](https://github.com/ium-mui/TERMCADE/actions/workflows/ci.yml/badge.svg)](https://github.com/ium-mui/TERMCADE/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/ium-mui/TERMCADE)](https://github.com/ium-mui/TERMCADE/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -103,13 +105,13 @@ Results, history, and wallet balance are stored as JSON in the operating system'
 - [Development guide](docs/DEVELOPMENT.md)
 - [Issue, branch, commit, and pull request workflow](docs/GIT_WORKFLOW.md)
 - [Release and deployment process](docs/RELEASING.md)
-- [Translation policy](docs/TRANSLATIONS.md)
+- [Language support](docs/TRANSLATIONS.md)
 
 ## Contributing
 
-Contributions are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md), discuss substantial changes in an issue, and run `./scripts/check.sh` before opening a pull request. Participation is governed by the [Code of Conduct](CODE_OF_CONDUCT.md).
+Contributions are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md), discuss substantial changes in an issue, and run `./scripts/check.sh` before opening a pull request. Documentation and pull request discussions may use English, Korean, or Simplified Chinese.
 
-For help, see [SUPPORT.md](SUPPORT.md). Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
+For the small set of security-sensitive bugs, see [SECURITY.md](SECURITY.md).
 
 ## License
 

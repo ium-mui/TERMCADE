@@ -34,7 +34,7 @@ cargo fmt --all
 5. Connect keys in `App::handle_playing`, leaving rule calculation in the session.
 6. Add the play view and control hints in `ui.rs`, using only public read-only accessors.
 7. Extend the default-stage table and core user-flow coverage in `tests/app_flows.rs`.
-8. Update the English game reference and both translations, then run `./scripts/check.sh`.
+8. Update the affected supported-language game references, then run `./scripts/check.sh`.
 
 ## Game-session contract
 
@@ -59,7 +59,7 @@ Keep individual game-rule tests in the corresponding module. Use seeded construc
 
 ## Documentation changes
 
-English is canonical. Update the matching files under `docs/ko` and `docs/zh-CN` in the same pull request whenever practical. Follow [TRANSLATIONS.md](TRANSLATIONS.md); CI verifies that every canonical document has both current locale files.
+English, Korean, and Simplified Chinese are parallel documentation editions. Start in any supported language, update the related editions when practical, and request language review in the pull request when needed. Follow [TRANSLATIONS.md](TRANSLATIONS.md); CI verifies that each language has the expected files.
 
 ## Definition of done
 
